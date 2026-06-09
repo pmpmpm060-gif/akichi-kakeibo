@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 
 export default function HomePage() {
   const [totalExpense, setTotalExpense] = useState<number>(0);
-  const [totalBudget, setTotalBudget] = useState<number>(0); // 💡 今月の総予算を格納
+  const [totalBudget, setTotalBudget] = useState<number>(0); // 💡 全カテゴリの合計予算額
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,12 +23,10 @@ export default function HomePage() {
 
       // 💡 2. 安全な期間指定
       const startOfMonth = `${yearMonthStr}-01`;
-      
-      // 確実な月末日を計算
       const lastDay = new Date(jstYear, now.getMonth() + 1, 0).getDate();
       const safeEndOfMonth = `${yearMonthStr}-${String(lastDay).padStart(2, '0')}`;
 
-      // ① 今月の支出（expense）の実績をSupabaseから取得
+      // ① 今月の支出（expense）の実績だけをSupabaseから全部持ってくる
       const { data: expenseData, error: expenseError } = await supabase
         .from('transactions')
         .select('amount')
@@ -40,23 +38,20 @@ export default function HomePage() {
         const total = expenseData.reduce((sum, item) => sum + Number(item.amount), 0);
         setTotalExpense(total);
       } else if (expenseError) {
-        console.error("支出取得エラー:", expenseError.message);
+        console.error("Supabaseエラー(支出):", expenseError.message);
       }
 
-      // ② 💡 今月の予算（budgets）をDBから取得して合計する
-      // budgets テーブルに 'year', 'month', 'amount' カラムがある前提のクエリです
+      // ② 💡 ダッシュボードの設計と完全に同期！
+      // budgetsテーブルから現在設定されている全ての予算額を取得して足し算します
       const { data: budgetData, error: budgetError } = await supabase
         .from('budgets')
-        .select('amount')
-        .eq('year', jstYear)
-        .eq('month', now.getMonth() + 1); // 1~12の数値
+        .select('amount');
 
       if (!budgetError && budgetData) {
-        // 設定されているカテゴリごとの予算などをすべて足し算して今月の総予算を出す
-        const budgetTotal = budgetData.reduce((sum, item) => sum + Number(item.amount), 0);
-        setTotalBudget(budgetTotal);
+        const bTotal = budgetData.reduce((sum, item) => sum + Number(item.amount), 0);
+        setTotalBudget(bTotal);
       } else if (budgetError) {
-        console.error("予算取得エラー:", budgetError.message);
+        console.error("Supabaseエラー(予算):", budgetError.message);
       }
 
       setLoading(false);
@@ -89,9 +84,9 @@ export default function HomePage() {
     },
   ];
 
-  // 💡 予算の計算
-  const remainingBudget = totalBudget - totalExpense; // 残り予算（マイナスなら赤字）
-  const isOverBudget = remainingBudget < 0; // 予算オーバー判定
+  // 💡 予算・過不足の計算ロジック
+  const remainingBudget = totalBudget - totalExpense; // 残り予算
+  const isOverBudget = remainingBudget < 0; // 予算オーバーしているか
 
   return (
     <div className="p-6 flex flex-col gap-8">
@@ -129,7 +124,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* 📊 新設：予算・過不足メーターカード（元の世界観に合わせたポップなデザイン！） */}
+      {/* 📊 予算・過不足メーターカード（元の世界観にジャストフィット！） */}
       {!loading && totalBudget > 0 && (
         <div className={`border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-3 transition-all ${
           isOverBudget ? 'bg-rose-100' : 'bg-emerald-100/60'
@@ -159,7 +154,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 🐷 ポップな予算の進捗メーターバー */}
+          {/* 🐷 予算の進捗メーターバー */}
           <div className="w-full bg-white h-3 rounded-full border-2 border-slate-800 overflow-hidden">
             <div 
               className={`h-full border-r border-slate-800 transition-all duration-500 ${isOverBudget ? 'bg-rose-400' : 'bg-emerald-400'}`}
@@ -169,15 +164,15 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* もし予算が全く登録されていない場合のアナウンス */}
+      {/* 予算が1円も登録されていない場合のフォールバック */}
       {!loading && totalBudget === 0 && (
-        <div className="bg-slate-100 border-2 border-slate-400 border-dashed rounded-3xl p-4 text-center">
-          <p className="text-xs font-bold text-slate-500">今月の予算がまだ設定されていません 🐷</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">下のメニューから予算を決めるとここにメーターが出現！</p>
+        <div className="bg-slate-50 border-2 border-slate-400 border-dashed rounded-3xl p-4 text-center">
+          <p className="text-xs font-bold text-slate-500">予算がまだ設定されていません 🐷</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">下のメニューから「予算をきめる」とここにメーターが出現します！</p>
         </div>
       )}
 
-      {/* メニューボタン一覧（元のデザインそのまま！） */}
+      {/* メニューボタン一覧（元のデザイン100%維持！） */}
       <div className="flex flex-col gap-5">
         <p className="text-sm font-black text-slate-400 uppercase tracking-widest px-1">メニュー</p>
         
