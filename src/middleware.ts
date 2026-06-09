@@ -7,14 +7,12 @@ export function middleware(req: NextRequest) {
   if (basicAuth) {
     const authValue = basicAuth.split(' ')[1];
     
-    // 💡 ユーザー名「akichi」、パスワード「akichi0305」でロックをかけます
-    // (これは「akichi:akichi0305」をBase64形式に変換した文字列です)
+    // ユーザー名「akichi」、パスワード「akichi0305」
     if (authValue === 'YWtpY2hpOmFraWNoaTAzMDU=') {
       return NextResponse.next();
     }
   }
 
-  // パスワードが違う、または入力されていない場合はブラウザのログイン画面を出す
   return new NextResponse('認証が必要です', {
     status: 401,
     headers: {
@@ -23,7 +21,19 @@ export function middleware(req: NextRequest) {
   });
 }
 
-// アプリの全画面にこのロックを適用する設定
+// 💡 ここが超重要！
+// 画像ファイル（.png等）や、Next.jsの内部通信（_next/static等）、favicon などの時は
+// パスワードチェックをスキップさせて、無限ループを回避します。
 export const config = {
-  matcher: '/:path*',
+  matcher: [
+    /*
+     * 次のパスで始まるもの以外すべてにマッチ：
+     * - api (API routes)
+     * - _next/static (静的ファイル)
+     * - _next/image (画像最適化ファイル)
+     * - favicon.ico (ファビコン)
+     * - 画像などの拡張子
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 };
