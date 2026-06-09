@@ -5,7 +5,8 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 💡 【重要】トップ画面かダッシュボード以外のページ（ログイン画面など）は、チェックせずに一瞬でスルー！
+  // 💡 【超重要】トップ画面（/）とダッシュボード（/dashboard）以外は一瞬でスルー
+  // ログイン画面（/login）自体もここで完全にスルーされるため、絶対にループしません
   if (pathname !== '/' && !pathname.startsWith('/dashboard')) {
     return NextResponse.next();
   }
@@ -16,7 +17,7 @@ export async function middleware(req: NextRequest) {
     },
   });
 
-  // あなたのSupabaseのURLとキーをここに貼り付けてください
+  // あなたのSupabaseのURLとキー
   const SUPABASE_URL = 'https://xxxx.supabase.co'; // 👈 ご自身のURL
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1Ni...'; // 👈 ご自身のAnon Key
 
@@ -50,18 +51,19 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // ログイン状態をチェック
+  // ログインユーザーの取得
   const { data: { user } } = await supabase.auth.getUser();
 
-  // ログインしていない場合は、強制的にログイン画面へ
+  // 💡 ログインしていない場合はログイン画面（/login）へ安全に転送
   if (!user) {
-    return NextResponse.redirect(new URL('/login', req.url));
+    const url = req.nextUrl.clone();
+    url.pathname = '/login';
+    return NextResponse.redirect(url);
   }
 
   return res;
 }
 
-// 💡 確実に「/」と「/dashboard」の時だけこのミドルウェアを起動する
 export const config = {
   matcher: [
     '/',
