@@ -3,15 +3,22 @@ import type { NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // 💡 【重要】トップ画面かダッシュボード以外のページ（ログイン画面など）は、チェックせずに一瞬でスルー！
+  if (pathname !== '/' && !pathname.startsWith('/dashboard')) {
+    return NextResponse.next();
+  }
+
   let res = NextResponse.next({
     request: {
       headers: req.headers,
     },
   });
 
-  // 💡 確実に動かすために、URLとキーを直接指定します
-  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!; // 👈 あなたのSupabaseのURLに書き換えてください
-  const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  // あなたのSupabaseのURLとキーをここに貼り付けてください
+  const SUPABASE_URL = 'https://xxxx.supabase.co'; // 👈 ご自身のURL
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1Ni...'; // 👈 ご自身のAnon Key
 
   const supabase = createServerClient(
     SUPABASE_URL,
@@ -43,31 +50,20 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // 現在ログインしているユーザーの情報を取得
+  // ログイン状態をチェック
   const { data: { user } } = await supabase.auth.getUser();
 
-  // 💡 ログインしていない ＆ ログイン画面以外にアクセスしようとしたら、強制的にログイン画面へ
-  if (!user && !req.nextUrl.pathname.startsWith('/login')) {
+  // ログインしていない場合は、強制的にログイン画面へ
+  if (!user) {
     return NextResponse.redirect(new URL('/login', req.url));
-  }
-
-  // 💡 逆にすでにログインしているのにログイン画面を開こうとしたら、トップ画面へ戻す
-  if (user && req.nextUrl.pathname.startsWith('/login')) {
-    return NextResponse.redirect(new URL('/', req.url));
   }
 
   return res;
 }
 
-// （上のコードはそのまま触らず、一番下のここだけを書き換えます）
-
+// 💡 確実に「/」と「/dashboard」の時だけこのミドルウェアを起動する
 export const config = {
   matcher: [
-    /*
-     * 💡 見張る対象を「トップ画面（/）」と「家計簿入力（/dashboard）」だけに限定します！
-     * これにより、ログイン画面自体や、裏側の細かいファイル読み込みの時は
-     * Supabaseへの通信を完全にスキップして爆速になります。
-     */
     '/',
     '/dashboard/:path*',
   ],
