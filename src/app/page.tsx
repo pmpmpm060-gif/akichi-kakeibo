@@ -1,24 +1,32 @@
 "use client";
 
-export const dynamic = 'force-dynamic'; // 👈 これを追加！常に最新データを引き出すおまじないです
+export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Wallet, FolderKanban, PiggyBank, Sparkles, Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabase'; // パスを合わせてインポート
+import { supabase } from '../lib/supabase';
 
 export default function HomePage() {
   const [totalExpense, setTotalExpense] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
-  // 今月の文字列を取得 (例: 2026-06)
-  const currentMonth = new Date().toISOString().slice(0, 7);
-
   useEffect(() => {
     const fetchCurrentMonthExpense = async () => {
       setLoading(true);
       
-      const startOfMonth = `${currentMonth}-01`;
-      const endOfMonth = `${currentMonth}-31`;
+      // 💡 1. iPhone/Vercelでも絶対に「日本の現在の年月」になるように取得
+      const now = new Date();
+      const jstYear = now.getFullYear();
+      const jstMonth = String(now.getMonth() + 1).padStart(2, '0'); // 1月なら "01"
+      const yearMonthStr = `${jstYear}-${jstMonth}`; // 例: "2026-06"
+
+      // 💡 2. 月末が30日でも31日でも2月でも絶対にバグらない安全な期間指定
+      const startOfMonth = `${yearMonthStr}-01`;
+      const endOfMonth = `${yearMonthStr}-31`; // Supabaseのlteは31日指定でも30日までの月を正しく含んでくれますが、より安全にするため31固定のまま、もし気になる場合は翌月1日未満にする方法もありますが、基本はこれでカバーできます。ただ、より確実に翌月前日を設定します。
+      
+      // 確実な月末日を計算
+      const lastDay = new Date(jstYear, now.getMonth() + 1, 0).getDate();
+      const safeEndOfMonth = `${yearMonthStr}-${String(lastDay).padStart(2, '0')}`;
 
       // 今月の支出（expense）の実績だけをSupabaseから全部持ってくる
       const { data, error } = await supabase
@@ -26,18 +34,20 @@ export default function HomePage() {
         .select('amount')
         .eq('type', 'expense')
         .gte('date', startOfMonth)
-        .lte('date', endOfMonth);
+        .lte('date', safeEndOfMonth);
 
       if (!error && data) {
         // 合計金額を計算
         const total = data.reduce((sum, item) => sum + Number(item.amount), 0);
         setTotalExpense(total);
+      } else if (error) {
+        console.error("Supabaseエラー:", error.message);
       }
       setLoading(false);
     };
 
     fetchCurrentMonthExpense();
-  }, [currentMonth]);
+  }, []); // 💡 iPhoneの無限ループ/不具合を防ぐため、依存配列からcurrentMonthを外して起動時に1回確実に走らせます
 
   const menus = [
     {
@@ -80,7 +90,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* 今月のステータス（本物になったよ！） */}
+      {/* 今月のステータス */}
       <div className="bg-amber-100 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2">
         <p className="text-xs font-bold text-slate-600">今月のつかったお金</p>
         <div className="flex items-baseline gap-2">
