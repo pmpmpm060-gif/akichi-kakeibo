@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle, ChevronDown, ChevronUp, X, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle, ChevronDown, ChevronUp, X, CheckCircle2, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Category {
@@ -33,6 +33,12 @@ export default function DashboardPage() {
   const jstMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
   const yearMonth = `${jstYear}-${jstMonth}`;
 
+  // 本日の日付（yyyy-mm-dd形式）を取得してカレンダーのハイライトに使用
+  const todayStr = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  })();
+
   // データ用状態管理
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -43,10 +49,7 @@ export default function DashboardPage() {
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState("");
   
-  const [date, setDate] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  });
+  const [date, setDate] = useState(() => todayStr);
   const [description, setDescription] = useState("");
 
   // 予実あんないの開閉状態
@@ -167,7 +170,13 @@ export default function DashboardPage() {
     }
   };
 
-  // --- 💡 集計ロジック（収入と支出をそれぞれ集計） ---
+  // --- 集計ロジック ---
+  // 💡 1. ダッシュボード最上部用の「総収入」「総支出」「残高」の計算
+  const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+  const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+  const totalBalance = totalIncome - totalExpense;
+
+  // 予実案内用のカテゴリ別集計
   const summaryData = categories.map(cat => {
     const totalActual = transactions
       .filter(t => t.category_id === cat.id && t.type === cat.type)
@@ -227,6 +236,37 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
+          {/* 💡 【1】今月の全体集計（総収入・総支出・残高）カードセクション */}
+          <div className="bg-amber-100 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b-2 border-slate-800 pb-3">
+              <span className="font-black text-sm text-slate-700 flex items-center gap-1.5">
+                <Wallet className="w-4 h-4" /> 今月ののこり残高
+              </span>
+              <span className={`text-xl font-black ${totalBalance >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                ¥{totalBalance.toLocaleString()}
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div className="bg-white border-2 border-slate-800 rounded-2xl p-2.5 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] flex flex-col items-center justify-center">
+                <span className="text-[10px] font-black text-slate-400 flex items-center gap-0.5 uppercase tracking-wider">
+                  <ArrowUpRight className="w-3 h-3 text-emerald-500" strokeWidth={3} /> 総しゅうにゅう
+                </span>
+                <span className="text-sm font-black text-slate-800 mt-1">
+                  ¥{totalIncome.toLocaleString()}
+                </span>
+              </div>
+              <div className="bg-white border-2 border-slate-800 rounded-2xl p-2.5 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] flex flex-col items-center justify-center">
+                <span className="text-[10px] font-black text-slate-400 flex items-center gap-0.5 uppercase tracking-wider">
+                  <ArrowDownRight className="w-3 h-3 text-rose-400" strokeWidth={3} /> 総しゅっぴつ
+                </span>
+                <span className="text-sm font-black text-slate-800 mt-1">
+                  ¥{totalExpense.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* 実績入力フォーム */}
           <form onSubmit={handleAddTransaction} className="bg-emerald-50 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4">
             <h2 className="font-black text-base text-emerald-950 flex items-center gap-1.5">
@@ -263,7 +303,7 @@ export default function DashboardPage() {
             </button>
           </form>
 
-          {/* 💡 グラフ ＆ 予実差異セクション（収入・支出両対応版） */}
+          {/* グラフ ＆ 予実差異セクション */}
           <div className="flex flex-col gap-2">
             <button onClick={() => setIsSummaryOpen(!isSummaryOpen)} className="flex justify-between items-center w-full px-1 py-2 text-left">
               <p className="text-xs font-black text-slate-400 uppercase tracking-widest">今月の予実あんない 📊</p>
@@ -279,7 +319,7 @@ export default function DashboardPage() {
             {isSummaryOpen && (
               <div className="flex flex-col gap-5 transition-all duration-300">
                 
-                {/* 💡 1. 収入の達成進捗 */}
+                {/* 収入の達成進捗 */}
                 {incomeSummary.length > 0 && (
                   <div className="flex flex-col gap-2.5">
                     <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">💰 収入の達成スピード</p>
@@ -311,7 +351,7 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {/* 💡 2. 支出の予算枠 */}
+                {/* 支出の予算枠 */}
                 {expenseSummary.length > 0 && (
                   <div className="flex flex-col gap-2.5">
                     <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">💸 支出の残り枠</p>
@@ -352,8 +392,15 @@ export default function DashboardPage() {
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">今月のきろくカレンダー 📅</p>
             
             <div className="bg-white border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-              <div className="grid grid-cols-7 gap-1 text-center text-xs font-black text-slate-400 mb-2">
-                <span className="text-rose-500">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span className="text-sky-500">土</span>
+              {/* 💡 【2】曜日のヘッダーの色を、よりパキッと鮮やかに変更 */}
+              <div className="grid grid-cols-7 gap-1 text-center text-xs font-black mb-2">
+                <span className="text-rose-500 bg-rose-50 py-0.5 rounded-md">日</span>
+                <span className="text-slate-500">月</span>
+                <span className="text-slate-500">火</span>
+                <span className="text-slate-500">水</span>
+                <span className="text-slate-500">木</span>
+                <span className="text-slate-500">金</span>
+                <span className="text-sky-500 bg-sky-50 py-0.5 rounded-md">土</span>
               </div>
               
               <div className="grid grid-cols-7 gap-1.5">
@@ -362,8 +409,12 @@ export default function DashboardPage() {
                   
                   const formattedDay = String(day).padStart(2, '0');
                   const targetDateStr = `${yearMonth}-${formattedDay}`;
-                  const dayTransactions = transactions.filter(t => t.date === targetDateStr);
                   
+                  // 💡 【2】今日の日付、土曜日、日曜日の判定用
+                  const isToday = targetDateStr === todayStr;
+                  const dayOfWeek = new Date(jstYear, currentDate.getMonth(), day).getDay(); // 0:日, 6:土
+
+                  const dayTransactions = transactions.filter(t => t.date === targetDateStr);
                   const dayExpense = dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
                   const dayIncome = dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
 
@@ -373,9 +424,21 @@ export default function DashboardPage() {
                       onClick={() => {
                         setSelectedDate(targetDateStr);
                       }}
-                      className="aspect-square border border-slate-200 rounded-xl flex flex-col justify-between p-1 hover:bg-slate-50 active:bg-amber-100 transition-colors relative"
+                      /* 💡 【2】今日なら太い黄色のボーダーと淡い背景、土日ならそれぞれの薄い背景をデフォルト適用 */
+                      className={`aspect-square border-2 rounded-xl flex flex-col justify-between p-1 hover:bg-amber-50 active:bg-amber-100 transition-all relative
+                        ${isToday ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-300 ring-offset-1' : 'border-slate-200'}
+                        ${!isToday && dayOfWeek === 0 ? 'bg-rose-50/30' : ''}
+                        ${!isToday && dayOfWeek === 6 ? 'bg-sky-50/30' : ''}
+                      `}
                     >
-                      <span className="text-xs font-black text-slate-700">{day}</span>
+                      {/* 💡 【2】日付の文字色も土日でしっかりクッキリ分ける */}
+                      <span className={`text-xs font-black 
+                        ${dayOfWeek === 0 ? 'text-rose-600' : dayOfWeek === 6 ? 'text-sky-600' : 'text-slate-700'}
+                        ${isToday ? 'bg-amber-400 text-slate-900 px-1 rounded-md text-[10px]' : ''}
+                      `}>
+                        {day}
+                      </span>
+                      
                       <div className="flex flex-col text-[8px] leading-tight w-full text-right font-bold overflow-hidden">
                         {dayExpense > 0 && <span className="text-rose-500 text-right">-{dayExpense}</span>}
                         {dayIncome > 0 && <span className="text-emerald-500 text-right">+{dayIncome}</span>}
