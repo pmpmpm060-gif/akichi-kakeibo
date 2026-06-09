@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle, Sparkles } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Category {
@@ -23,9 +23,17 @@ interface Transaction {
 }
 
 export default function DashboardPage() {
-  // 日付・月の状態管理 (2026年想定)
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const yearMonth = currentDate.toISOString().slice(0, 7); // "2026-06" 形式
+  const router = useRouter();
+
+  // 💡 安全な日付・月の状態管理（JSTベース）
+  const [currentDate, setCurrentDate] = useState(() => {
+    return new Date();
+  });
+
+  // 💡 iPhoneでも絶対にクラッシュしない形式で「YYYY-MM」を作る
+  const jstYear = currentDate.getFullYear();
+  const jstMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
+  const yearMonth = `${jstYear}-${jstMonth}`; // 例: "2026-06"
 
   // データ用状態管理
   const [categories, setCategories] = useState<Category[]>([]);
@@ -36,13 +44,19 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // 今日
+  
+  // 💡 今日の日付（YYYY-MM-DD）も安全に取得
+  const [date, setDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   const [description, setDescription] = useState("");
 
   // 月の切り替え
   const changeMonth = (increment: number) => {
-    const newDate = new Date(currentDate.setMonth(currentDate.getMonth() + increment));
-    setCurrentDate(new Date(newDate));
+    const newDate = new Date(currentDate.getTime());
+    newDate.setMonth(newDate.getMonth() + increment);
+    setCurrentDate(newDate);
   };
 
   // データのまるごと取得
@@ -64,15 +78,16 @@ export default function DashboardPage() {
     }
     setBudgets(budgetMap);
 
-    // 3. 選択された月の家計簿実績（リレーションでカテゴリ名も一緒に取得）
+    // 3. 💡 月末日が30日でも2月でも絶対にバグらない安全な指定
     const startOfMonth = `${yearMonth}-01`;
-    const endOfMonth = `${yearMonth}-31`; // 簡易的な末日指定（PostgreSQL側で丸めてくれます）
+    const lastDay = new Date(jstYear, currentDate.getMonth() + 1, 0).getDate();
+    const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
     const { data: transData } = await supabase
       .from('transactions')
       .select('*, categories(name)')
       .gte('date', startOfMonth)
-      .lte('date', endOfMonth)
+      .lte('date', safeEndOfMonth)
       .order('date', { ascending: false });
 
     if (transData) setTransactions(transData as unknown as Transaction[]);
@@ -108,6 +123,7 @@ export default function DashboardPage() {
       setTransactions([data[0] as unknown as Transaction, ...transactions]);
       setAmount("");
       setDescription("");
+      router.refresh();
     }
   };
 
@@ -120,7 +136,6 @@ export default function DashboardPage() {
   };
 
   // --- 集計ロジック ---
-  // カテゴリごとの今月の支出合計を計算
   const expenseSummary = categories
     .filter(c => c.type === 'expense')
     .map(cat => {
@@ -147,7 +162,7 @@ export default function DashboardPage() {
           <ChevronLeft className="w-6 h-6 text-slate-800" strokeWidth={2.5} />
         </button>
         <span className="font-black text-lg text-emerald-950">
-          {currentDate.getFullYear()}年{currentDate.getMonth() + 1}月
+          {jstYear}年{Number(jstMonth)}月
         </span>
         <button onClick={() => changeMonth(1)} className="w-10 h-10 bg-white border-2 border-slate-800 rounded-xl flex items-center justify-center active:bg-slate-100">
           <ChevronRight className="w-6 h-6 text-slate-800" strokeWidth={2.5} />
@@ -181,7 +196,6 @@ export default function DashboardPage() {
                         )}
                       </div>
                     </div>
-                    {/* ポップな進捗バーグラフ */}
                     <div className="w-full h-4 bg-slate-100 border-2 border-slate-800 rounded-full overflow-hidden p-[1px]">
                       <div 
                         className={`h-full rounded-full border-r border-slate-800 transition-all duration-500 ${isOver ? 'bg-rose-400' : percent > 80 ? 'bg-amber-400' : 'bg-emerald-400'}`}
