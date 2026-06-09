@@ -3,39 +3,34 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, Loader2 } from 'lucide-react';
-// さっき作ったSupabaseクライアントをインポート
 import { supabase } from '../../lib/supabase';
 
-// 絵文字アイコンのマッピング
-const iconMap: { [key: string]: string } = {
-  food: "🍔",
-  shopping: "🛍️",
-  transport: "🚗",
-  home: "🏠",
-  other: "✨",
-};
+// 💡 ユーザーが選べるポップな絵文字パレットの候補
+const ICON_PALETTE = ["🍔", "🛍️", "🚗", "🏠", "✨", "☕", "🍿", "🎮", "🐱", "💪", "💴", "🎁"];
 
-// TypeScript用の型定義
 interface Category {
   id: string;
   name: string;
   type: 'expense' | 'income';
+  icon: string; // 💡 DBに追加したiconカラム用
 }
 
 export default function CategoriesPage() {
-  // 状態管理
   const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true); // 読み込み中フラグ
+  const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [type, setType] = useState<"expense" | "income">("expense");
+  
+  // 💡 選択中のアイコン状態（初期値はパレットの先頭）
+  const [selectedIcon, setSelectedIcon] = useState("🍔");
 
-  // --- 1. データの読み込み (SELECT) ---
+  // --- 1. データの読み込み (iconカラムも一緒に取得) ---
   const fetchCategories = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('categories')
       .select('*')
-      .order('created_at', { ascending: false }); // 新しい順に並べる
+      .order('created_at', { ascending: false });
 
     if (error) {
       alert('データの取得に失敗しました：' + error.message);
@@ -45,44 +40,45 @@ export default function CategoriesPage() {
     setLoading(false);
   };
 
-  // 画面が開いたときに一回だけ実行する
   useEffect(() => {
     fetchCategories();
   }, []);
 
-  // --- 2. データの追加 (INSERT) ---
+  // --- 2. データの追加 (選んだiconを一緒にINSERT) ---
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    // Supabaseにデータを送る
     const { data, error } = await supabase
       .from('categories')
-      .insert([{ name, type }])
-      .select(); // 挿入したデータを取得する
+      .insert([{ 
+        name, 
+        type, 
+        icon: selectedIcon // 💡 ここで選んだ絵文字をDBに送る！
+      }])
+      .select();
 
     if (error) {
       alert('追加に失敗しました：' + error.message);
     } else if (data) {
-      // 画面の一覧に、追加されたデータを合流させる
       setCategories([data[0] as Category, ...categories]);
-      setName(""); // 入力欄をクリア
+      setName("");
+      // 次に入力しやすいようにデフォルトアイコンを戻すか、そのままにする
     }
   };
 
-  // --- 3. データの削除 (DELETE) ---
+  // --- 3. データの削除 ---
   const handleDeleteCategory = async (id: string) => {
     if (!confirm('本当にこのカテゴリを削除しますか？')) return;
 
     const { error } = await supabase
       .from('categories')
       .delete()
-      .eq('id', id); // 指定したIDの行を消す
+      .eq('id', id);
 
     if (error) {
       alert('削除に失敗しました：' + error.message);
     } else {
-      // 画面の一覧から消したデータを省く
       setCategories(categories.filter(cat => cat.id !== id));
     }
   };
@@ -127,6 +123,27 @@ export default function CategoriesPage() {
           </button>
         </div>
 
+        {/* 💡 アイコン（絵文字）パレットの選択セクション */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-black text-pink-900 pl-1">アイコンをえらぶ</label>
+          <div className="grid grid-cols-6 gap-2 bg-white/80 p-3 rounded-2xl border-2 border-slate-800">
+            {ICON_PALETTE.map((icon) => (
+              <button
+                key={icon}
+                type="button"
+                onClick={() => setSelectedIcon(icon)}
+                className={`aspect-square text-xl flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                  selectedIcon === icon 
+                    ? "bg-amber-200 border-2 border-slate-800 shadow-[1px_1px_0px_0px_rgba(15,23,42,1)]" 
+                    : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* カテゴリ名入力 */}
         <div className="flex flex-col gap-1">
           <label className="text-xs font-black text-pink-900 pl-1">カテゴリ名</label>
@@ -153,7 +170,6 @@ export default function CategoriesPage() {
         <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">登録されているカテゴリ</p>
         
         {loading ? (
-          // 読み込み中のぐるぐるアニメーション
           <div className="flex justify-center py-8">
             <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
           </div>
@@ -168,8 +184,9 @@ export default function CategoriesPage() {
                   className="flex items-center justify-between p-3.5 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-xl">
-                      {cat.type === "expense" ? iconMap.food : iconMap.other}
+                    {/* 💡 DBから持ってきた固有のアイコン（cat.icon）を表示！ */}
+                    <div className="w-10 h-10 bg-slate-50 border-2 border-slate-800 rounded-xl flex items-center justify-center text-xl shadow-[1px_1px_0px_0px_rgba(15,23,42,1)]">
+                      {cat.icon || "✨"} 
                     </div>
                     <div>
                       <h3 className="font-black text-sm text-slate-800">{cat.name}</h3>
