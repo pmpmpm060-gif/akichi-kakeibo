@@ -1,39 +1,66 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-export function middleware(req: NextRequest) {
-  const basicAuth = req.headers.get('authorization');
-
-  if (basicAuth) {
-    const authValue = basicAuth.split(' ')[1];
-    
-    // ユーザー名「akichi」、パスワード「akichi0305」
-    if (authValue === 'YWtpY2hpOmFraWNoaTAzMDU=') {
-      return NextResponse.next();
-    }
-  }
-
-  return new NextResponse('認証が必要です', {
-    status: 401,
-    headers: {
-      'WWW-Authenticate': 'Basic realm="Secure Area"',
+export async function middleware(req: NextRequest) {
+  let res = NextResponse.next({
+    request: {
+      headers: req.headers,
     },
   });
+
+  // 💡 確実に動かすために、URLとキーを直接指定します
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!; // 👈 あなたのSupabaseのURLに書き換えてください
+  const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  const supabase = createServerClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        get(name: string) {
+          return req.cookies.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          req.cookies.set({ name, value, ...options });
+          res = NextResponse.next({
+            request: {
+              headers: req.headers,
+            },
+          });
+          res.cookies.set({ name, value, ...options });
+        },
+        remove(name: string, options: CookieOptions) {
+          req.cookies.set({ name, value: '', ...options });
+          res = NextResponse.next({
+            request: {
+              headers: req.headers,
+            },
+          });
+          res.cookies.set({ name, value: '', ...options });
+        },
+      },
+    }
+  );
+
+  // 現在ログインしているユーザーの情報を取得
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // 💡 ログインしていない ＆ ログイン画面以外にアクセスしようとしたら、強制的にログイン画面へ
+  if (!user && !req.nextUrl.pathname.startsWith('/login')) {
+    return NextResponse.redirect(new URL('/login', req.url));
+  }
+
+  // 💡 逆にすでにログインしているのにログイン画面を開こうとしたら、トップ画面へ戻す
+  if (user && req.nextUrl.pathname.startsWith('/login')) {
+    return NextResponse.redirect(new URL('/', req.url));
+  }
+
+  return res;
 }
 
-// 💡 ここが超重要！
-// 画像ファイル（.png等）や、Next.jsの内部通信（_next/static等）、favicon などの時は
-// パスワードチェックをスキップさせて、無限ループを回避します。
 export const config = {
   matcher: [
-    /*
-     * 次のパスで始まるもの以外すべてにマッチ：
-     * - api (API routes)
-     * - _next/static (静的ファイル)
-     * - _next/image (画像最適化ファイル)
-     * - favicon.ico (ファビコン)
-     * - 画像などの拡張子
-     */
     '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
