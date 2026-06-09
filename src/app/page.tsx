@@ -86,7 +86,7 @@ export default function HomePage() {
   const remainingBudget = totalBudget - totalExpense;
   const isOverBudget = remainingBudget < 0;
 
-  // 💡 【本気のAI】Gemini APIを叩いてトントン語録をその場で錬成するロジック
+// 💡 修正版：新しく作ったAPIルート経由で安全にトントンとおしゃべりするロジック
   const handlePigTalk = async () => {
     if (loading || aiLoading) return;
 
@@ -94,49 +94,36 @@ export default function HomePage() {
     setPigMessage("うーん、今月のデータをじっくり分析中だぶひ…少々お待ちをぶー…🐷🌀");
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("APIキーが設定されていません。");
-      }
-
-      // クライアントの初期化
-      const ai = new GoogleGenAI({ apiKey });
-      
-      // トントンの人格プロンプトとリアルな数字を注入
-      const prompt = `
-      あなたは家計簿アプリに住む、かわいくてちょっと辛口なアドバイザーの「AIブタのトントン」です。
-      ユーザーの今月の家計状況（予算と支出）を元に、楽しくて親しみやすいアドバイスコメントを150文字程度で作成してください。
-
-      【今月の家計状況】
-      ・設定された総予算: ${totalBudget} 円
-      ・現在の総支出額: ${totalExpense} 円
-      ・残りの予算残高: ${remainingBudget} 円 ${isOverBudget ? '(予算オーバーしています)' : '(まだ予算に余裕があります)'}
-
-      【キャラクター設定ルール】
-      1. 語尾は必ず「〜だぶー」「〜ぶひ！」「〜だぶひ」にしてください。
-      2. 予算に対して使いすぎている場合は優しく諭すか、適度に危機感を持たせてください（例: 「お財布がペッちゃんこだぶー！」など）。逆に節約できている場合は大げさに褒めちぎってください。
-      3. 返答にはマークダウンの太字などは使わず、プレーンな文章（改行や絵文字はOK）で出力してください。
-      4. 「AIブタのトントン」になりきり、システム的なメタ発言は一切禁止します。
-      `;
-
-      // 軽量・高速・安価でかしこい gemini-2.5-flash を使用
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
+      // 💡 フロントから直接Geminiを叩くのではなく、自作したAPIにデータを投げる
+      const res = await fetch('/api/tonton', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          totalBudget,
+          totalExpense,
+          remainingBudget,
+          isOverBudget
+        }),
       });
 
-      const aiText = response.text || "おしゃべりに失敗しちゃったぶー…お口がもつれたぶひ。";
-      setPigMessage(aiText);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "エラーが発生したぶー");
+      }
+
+      setPigMessage(data.text);
 
     } catch (error) {
-      console.error("Gemini API エラー:", error);
-      setPigMessage("ごめんぶー！頭がオーバーヒートしちゃったぶひ…！秘密のAPIキーがうまく設定されていないかもしれないぶー。確認してみてね！😭");
+      console.error("トントンAPIエラー:", error);
+      setPigMessage("ごめんぶー！頭がオーバーヒートしちゃったぶひ…！Vercelの設定画面（Environment Variables）で「NEXT_PUBLIC_GEMINI_API_KEY」が正しく追加されているか、もう一度確認してみてね！😭");
     } finally {
       setAiLoading(false);
     }
   };
-
-  return (
+    return (
     <div className="p-6 flex flex-col gap-8">
       {/* ヘッダー部分 */}
       <div className="flex items-center justify-between pt-4">
