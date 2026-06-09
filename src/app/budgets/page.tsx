@@ -9,7 +9,7 @@ interface Category {
   id: string;
   name: string;
   type: 'expense' | 'income';
-  icon: string; // 💡 型定義にiconを追加
+  icon: string;
 }
 
 interface Budget {
@@ -27,11 +27,10 @@ export default function BudgetsPage() {
   const fetchData = async () => {
     setLoading(true);
     
-    // 1. 支出カテゴリ一覧を取得（自動的に新しいiconカラムも取得されます）
+    // 1. 💡 支出・収入の両方を取得するため、.eq('type', 'expense') を削除
     const { data: catData } = await supabase
       .from('categories')
-      .select('*')
-      .eq('type', 'expense');
+      .select('*');
 
     // 2. 全月共通の基本予算を取得
     const { data: budgetData } = await supabase
@@ -47,7 +46,7 @@ export default function BudgetsPage() {
       });
     }
     setBudgets(budgetMap);
-    loading === true && setLoading(false);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -83,6 +82,36 @@ export default function BudgetsPage() {
     setIsSaving(false);
   };
 
+  // 💡 画面表示用に「収入」と「支出」にフィルタリング
+  const incomeCategories = categories.filter(c => c.type === 'income');
+  const expenseCategories = categories.filter(c => c.type === 'expense');
+
+  // 💡 各カテゴリカードをレンダリングする共通コンポーネント（DRYにスッキリと）
+  const renderCategoryRows = (targetCategories: Category[]) => {
+    return targetCategories.map((cat) => (
+      <div 
+        key={cat.id}
+        className="flex items-center justify-between p-4 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
+      >
+        <span className="font-black text-sm text-slate-800 flex items-center gap-2">
+          <span className="text-xl">{cat.icon || (cat.type === 'income' ? "💰" : "💸")}</span> {cat.name}
+        </span>
+        
+        <div className="flex items-center gap-1.5 max-w-[140px]">
+          <input
+            type="number"
+            inputMode="numeric"
+            value={budgets[cat.id] === undefined ? "" : budgets[cat.id]}
+            onChange={(e) => handleAmountChange(cat.id, e.target.value)}
+            placeholder="0"
+            className={`w-full px-3 py-2 rounded-xl border-2 border-slate-800 text-right font-black text-sm focus:outline-none ${cat.type === 'income' ? 'focus:bg-emerald-50' : 'focus:bg-sky-50'}`}
+          />
+          <span className="font-black text-xs text-slate-500 shrink-0">円</span>
+        </div>
+      </div>
+    ));
+  };
+
   return (
     <div className="p-6 flex flex-col gap-6">
       {/* ヘッダー */}
@@ -104,7 +133,7 @@ export default function BudgetsPage() {
       </div>
 
       {/* 予算入力リスト */}
-      <div className="flex flex-col gap-3 flex-1">
+      <div className="flex flex-col gap-5 flex-1">
         {loading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
@@ -117,35 +146,32 @@ export default function BudgetsPage() {
             </Link>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
-            {categories.map((cat) => (
-              <div 
-                key={cat.id}
-                className="flex items-center justify-between p-4 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
-              >
-                {/* 💡 固定のハンバーガーから、DBのアイコン（未設定なら✨）を表示するように変更 */}
-                <span className="font-black text-sm text-slate-800 flex items-center gap-2">
-                  <span className="text-xl">{cat.icon || "✨"}</span> {cat.name}
-                </span>
-                
-                <div className="flex items-center gap-1.5 max-w-[140px]">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={budgets[cat.id] === undefined ? "" : budgets[cat.id]}
-                    onChange={(e) => handleAmountChange(cat.id, e.target.value)}
-                    placeholder="0"
-                    className="w-full px-3 py-2 rounded-xl border-2 border-slate-800 text-right font-black text-sm focus:outline-none focus:bg-sky-50"
-                  />
-                  <span className="font-black text-xs text-slate-500 shrink-0">円</span>
+          <div className="flex flex-col gap-6">
+            
+            {/* 💡 1. 収入の予算設定セクション */}
+            {incomeCategories.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">💰 収入（目標金額）</p>
+                <div className="flex flex-col gap-3">
+                  {renderCategoryRows(incomeCategories)}
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* 💡 2. 支出の予算設定セクション */}
+            {expenseCategories.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">💸 支出（予算上限）</p>
+                <div className="flex flex-col gap-3">
+                  {renderCategoryRows(expenseCategories)}
+                </div>
+              </div>
+            )}
 
             <button
               onClick={handleSaveBudgets}
               disabled={isSaving}
-              className="w-full bg-sky-300 text-slate-900 font-black py-4 rounded-2xl border-2 border-slate-800 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] text-sm mt-4 flex items-center justify-center gap-2"
+              className="w-full bg-sky-300 text-slate-900 font-black py-4 rounded-2xl border-2 border-slate-800 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] text-sm flex items-center justify-center gap-2 mt-2"
             >
               {isSaving ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
