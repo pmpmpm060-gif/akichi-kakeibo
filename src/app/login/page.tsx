@@ -13,8 +13,8 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
 
   // 💡 ミドルウェアと完全に同期するSupabaseクライアントをここで作成
-  const SUPABASE_URL = 'https://xxxx.supabase.co'; // 👈 ご自身のURLに書き換えてください
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1Ni...'; // 👈 ご自身のAnon Keyに書き換えてください
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!; // 👈 ご自身のURLに書き換えてください
+  const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // 👈 ご自身のAnon Keyに書き換えてください
   const supabase = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const handleLogin = async (e: React.FormEvent) => {
