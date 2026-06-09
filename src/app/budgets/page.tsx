@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, PiggyBank, Save, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Category {
   id: string;
   name: string;
   type: 'expense' | 'income';
+  icon: string; // 💡 型定義にiconを追加
 }
 
 interface Budget {
@@ -26,7 +27,7 @@ export default function BudgetsPage() {
   const fetchData = async () => {
     setLoading(true);
     
-    // 1. 支出カテゴリ一覧を取得
+    // 1. 支出カテゴリ一覧を取得（自動的に新しいiconカラムも取得されます）
     const { data: catData } = await supabase
       .from('categories')
       .select('*')
@@ -37,7 +38,7 @@ export default function BudgetsPage() {
       .from('budgets')
       .select('category_id, amount');
 
-    if (catData) setCategories(catData);
+    if (catData) setCategories(catData as Category[]);
     
     const budgetMap: { [key: string]: number } = {};
     if (budgetData) {
@@ -46,7 +47,7 @@ export default function BudgetsPage() {
       });
     }
     setBudgets(budgetMap);
-    setLoading(false);
+    loading === true && setLoading(false);
   };
 
   useEffect(() => {
@@ -122,7 +123,10 @@ export default function BudgetsPage() {
                 key={cat.id}
                 className="flex items-center justify-between p-4 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
               >
-                <span className="font-black text-sm text-slate-800">🍔 {cat.name}</span>
+                {/* 💡 固定のハンバーガーから、DBのアイコン（未設定なら✨）を表示するように変更 */}
+                <span className="font-black text-sm text-slate-800 flex items-center gap-2">
+                  <span className="text-xl">{cat.icon || "✨"}</span> {cat.name}
+                </span>
                 
                 <div className="flex items-center gap-1.5 max-w-[140px]">
                   <input
