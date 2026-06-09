@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Category {
@@ -25,15 +25,12 @@ interface Transaction {
 export default function DashboardPage() {
   const router = useRouter();
 
-  // 💡 安全な日付・月の状態管理（JSTベース）
-  const [currentDate, setCurrentDate] = useState(() => {
-    return new Date();
-  });
+  // 安全な日付・月の状態管理（JSTベース）
+  const [currentDate, setCurrentDate] = useState(() => new Date());
 
-  // 💡 iPhoneでも絶対にクラッシュしない形式で「YYYY-MM」を作る
   const jstYear = currentDate.getFullYear();
   const jstMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
-  const yearMonth = `${jstYear}-${jstMonth}`; // 例: "2026-06"
+  const yearMonth = `${jstYear}-${jstMonth}`;
 
   // データ用状態管理
   const [categories, setCategories] = useState<Category[]>([]);
@@ -45,12 +42,14 @@ export default function DashboardPage() {
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState("");
   
-  // 💡 今日の日付（YYYY-MM-DD）も安全に取得
   const [date, setDate] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
   const [description, setDescription] = useState("");
+
+  // 💡 【新機能】予実あんないの開閉状態を管理する（初期状態は閉じている「false」）
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
 
   // 月の切り替え
   const changeMonth = (increment: number) => {
@@ -63,14 +62,12 @@ export default function DashboardPage() {
   const fetchData = async () => {
     setLoading(true);
 
-    // 1. カテゴリ一覧
     const { data: catData } = await supabase.from('categories').select('*');
     if (catData) {
       setCategories(catData);
       if (catData.length > 0 && !categoryId) setCategoryId(catData[0].id);
     }
 
-    // 2. 共通予算
     const { data: budgetData } = await supabase.from('budgets').select('category_id, amount');
     const budgetMap: { [key: string]: number } = {};
     if (budgetData) {
@@ -78,7 +75,6 @@ export default function DashboardPage() {
     }
     setBudgets(budgetMap);
 
-    // 3. 💡 月末日が30日でも2月でも絶対にバグらない安全な指定
     const startOfMonth = `${yearMonth}-01`;
     const lastDay = new Date(jstYear, currentDate.getMonth() + 1, 0).getDate();
     const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
@@ -175,40 +171,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* グラフ ＆ 予実差異セクション */}
-          <div className="flex flex-col gap-3.5">
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">今月の予実あんない 📊</p>
-            <div className="flex flex-col gap-3">
-              {expenseSummary.map(item => {
-                const percent = item.budget > 0 ? Math.min((item.actual / item.budget) * 100, 100) : 0;
-                const isOver = item.actual > item.budget && item.budget > 0;
-
-                return (
-                  <div key={item.id} className={`p-4 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2 ${isOver ? 'bg-rose-50/50' : ''}`}>
-                    <div className="flex justify-between items-center">
-                      <span className="font-black text-sm text-slate-800">{item.name}</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-500">¥{item.actual.toLocaleString()} / ¥{item.budget.toLocaleString()}</span>
-                        {isOver && (
-                          <span className="text-[10px] font-black bg-rose-500 text-white px-1.5 py-0.5 rounded border border-slate-800 flex items-center gap-0.5 animate-bounce">
-                            <AlertTriangle className="w-3 h-3" /> オーバー！
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="w-full h-4 bg-slate-100 border-2 border-slate-800 rounded-full overflow-hidden p-[1px]">
-                      <div 
-                        className={`h-full rounded-full border-r border-slate-800 transition-all duration-500 ${isOver ? 'bg-rose-400' : percent > 80 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 実績入力フォーム */}
+          {/* 💡 【上に移動】実績入力フォーム */}
           <form onSubmit={handleAddTransaction} className="bg-emerald-50 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4">
             <h2 className="font-black text-base text-emerald-950 flex items-center gap-1.5">
               <Plus className="w-5 h-5" strokeWidth={3} /> 今日のしゅっぴつ・しゅうにゅう
@@ -243,6 +206,56 @@ export default function DashboardPage() {
               きろくする！ ✨
             </button>
           </form>
+
+          {/* 💡 【下に移動＆アコーディオン化】グラフ ＆ 予実差異セクション */}
+          <div className="flex flex-col gap-2">
+            {/* タップできるヘッダー部分 */}
+            <button 
+              onClick={() => setIsSummaryOpen(!isSummaryOpen)}
+              className="flex justify-between items-center w-full px-1 py-2 text-left"
+            >
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">今月の予実あんない 📊</p>
+              <div className="flex items-center gap-1 text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                {isSummaryOpen ? (
+                  <>折りたたむ <ChevronUp className="w-3.5 h-3.5" /></>
+                ) : (
+                  <>ひらく・予算をみる <ChevronDown className="w-3.5 h-3.5" /></>
+                )}
+              </div>
+            </button>
+
+            {/* isSummaryOpen が true のときだけ中身を表示する */}
+            {isSummaryOpen && (
+              <div className="flex flex-col gap-3 transition-all duration-300">
+                {expenseSummary.map(item => {
+                  const percent = item.budget > 0 ? Math.min((item.actual / item.budget) * 100, 100) : 0;
+                  const isOver = item.actual > item.budget && item.budget > 0;
+
+                  return (
+                    <div key={item.id} className={`p-4 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2 ${isOver ? 'bg-rose-50/50' : ''}`}>
+                      <div className="flex justify-between items-center">
+                        <span className="font-black text-sm text-slate-800">{item.name}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-500">¥{item.actual.toLocaleString()} / ¥{item.budget.toLocaleString()}</span>
+                          {isOver && (
+                            <span className="text-[10px] font-black bg-rose-500 text-white px-1.5 py-0.5 rounded border border-slate-800 flex items-center gap-0.5 animate-bounce">
+                              <AlertTriangle className="w-3 h-3" /> オーバー！
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="w-full h-4 bg-slate-100 border-2 border-slate-800 rounded-full overflow-hidden p-[1px]">
+                        <div 
+                          className={`h-full rounded-full border-r border-slate-800 transition-all duration-500 ${isOver ? 'bg-rose-400' : percent > 80 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* 入力履歴一覧 */}
           <div className="flex flex-col gap-3">
