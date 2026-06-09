@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
+import { createBrowserClient } from '@supabase/ssr'; // 💡 SSR対応のクライアントに変更
 import { Loader2, Lock, Mail, Sparkles } from 'lucide-react';
 
 export default function LoginPage() {
@@ -12,12 +12,17 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // 💡 ミドルウェアと完全に同期するSupabaseクライアントをここで作成
+  const SUPABASE_URL = 'https://xxxx.supabase.co'; // 👈 ご自身のURLに書き換えてください
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1Ni...'; // 👈 ご自身のAnon Keyに書き換えてください
+  const supabase = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
 
-    // Supabaseにログインを要請
+    // Supabaseにログインを要請（これでクッキーにバッチリ保存されます）
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -27,9 +32,12 @@ export default function LoginPage() {
       setErrorMsg('メールアドレスかパスワードが違います 😭');
       setLoading(false);
     } else {
-      // ログイン成功！トップ画面へ
-      router.push('/');
-      router.refresh();
+      // 💡 ログイン成功！
+      // 確実にクッキーがブラウザに書き込まれるのを一瞬待ってからリダイレクトします
+      setTimeout(() => {
+        router.push('/');
+        router.refresh();
+      }, 500);
     }
   };
 
@@ -60,7 +68,7 @@ export default function LoginPage() {
             type="email" 
             required
             value={email} 
-            onChange={(e) => setEmail(e.target.value)} // ⭕ 完全にスッキリ直しました！
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="example@mail.com" 
             className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-800 font-bold text-sm" 
           />
@@ -83,7 +91,7 @@ export default function LoginPage() {
         <button 
           type="submit" 
           disabled={loading}
-          className="w-full bg-slate-900 text-white font-black py-3.5 rounded-2xl border-2 border-slate-800 text-sm mt-2 flex items-center justify-center gap-2 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all"
+          className="w-full bg-slate-900 text-white font-black py-3.5 rounded-2xl border-2 border-slate-800 text-sm mt-2 flex items-center justify-center gap-2 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
         >
           {loading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
