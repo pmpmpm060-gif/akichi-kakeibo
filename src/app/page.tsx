@@ -3,25 +3,26 @@
 export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Wallet, FolderKanban, PiggyBank, Sparkles, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Wallet, FolderKanban, PiggyBank, Sparkles, Loader2, AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function HomePage() {
   const [totalExpense, setTotalExpense] = useState<number>(0);
-  const [totalBudget, setTotalBudget] = useState<number>(0); // 💡 全カテゴリの合計予算額
+  const [totalBudget, setTotalBudget] = useState<number>(0); // 全カテゴリの合計予算額
   const [loading, setLoading] = useState(true);
+
+  // 💡 豚さんAIおしゃべり用の状態管理
+  const [pigMessage, setPigMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchCurrentMonthData = async () => {
       setLoading(true);
       
-      // 💡 1. iPhone/Vercelでも絶対に「日本の現在の年月」になるように取得
       const now = new Date();
       const jstYear = now.getFullYear();
       const jstMonth = String(now.getMonth() + 1).padStart(2, '0'); // 1月なら "01"
       const yearMonthStr = `${jstYear}-${jstMonth}`; // 例: "2026-06"
 
-      // 💡 2. 安全な期間指定
       const startOfMonth = `${yearMonthStr}-01`;
       const lastDay = new Date(jstYear, now.getMonth() + 1, 0).getDate();
       const safeEndOfMonth = `${yearMonthStr}-${String(lastDay).padStart(2, '0')}`;
@@ -41,8 +42,7 @@ export default function HomePage() {
         console.error("Supabaseエラー(支出):", expenseError.message);
       }
 
-      // ② 💡 ダッシュボードの設計と完全に同期！
-      // budgetsテーブルから現在設定されている全ての予算額を取得して足し算します
+      // ② budgetsテーブルから現在設定されている全ての予算額を取得して足し算
       const { data: budgetData, error: budgetError } = await supabase
         .from('budgets')
         .select('amount');
@@ -84,9 +84,45 @@ export default function HomePage() {
     },
   ];
 
-  // 💡 予算・過不足の計算ロジック
+  // 予算・過不足の計算ロジック
   const remainingBudget = totalBudget - totalExpense; // 残り予算
   const isOverBudget = remainingBudget < 0; // 予算オーバーしているか
+
+  // 💡 豚さんAIおしゃべり生成ロジック（トップの予算と支出から可愛く分析！）
+  const handlePigTalk = () => {
+    if (loading) return;
+
+    if (totalBudget === 0) {
+      setPigMessage("まだ今月の予算が設定されてないぶー！下の「予算をきめる」から目標をセットしてくれたら、ボクがしっかり見守るぶひ！🐷");
+      return;
+    }
+
+    const usageRate = (totalExpense / totalBudget) * 100;
+
+    if (isOverBudget) {
+      const msgs = [
+        `ひえええーっ！！大ピンチだぶー！設定した予算を ¥${Math.abs(remainingBudget).toLocaleString()} もオーバーしちゃってるぶひ！お財布がペッちゃんこでボク泣いちゃうぶー！😭 緊急事態宣言を発令するぶひ！`,
+        `ちょっと今月は飛ばしすぎちゃったぶー！？お買い物の嵐が吹き荒れたみたいだぶひ…！でも、現実から目を背けずに家計簿を開いてるだけでえらすぎるぶー。ここからはお茶を飲んで、物欲を無にするぶひ…！`
+      ];
+      setPigMessage(msgs[Math.floor(Math.random() * msgs.length)]);
+    } else if (usageRate > 85) {
+      setPigMessage(`イエローカードだぶー！残りの予算枠があと ¥${remainingBudget.toLocaleString()} になっちゃったぶひ。今月のゴールが見えてきたから、あとちょっとだけお財布の紐をギューッと締め直すぶー！がんばるぶひ！🔥`);
+    } else if (totalExpense === 0) {
+      setPigMessage("まだ今月は1円もつかってないぶー！真っ白でピカピカな家計簿だぶひ。この調子で今月もきれいにやりくりしていこうぶー！✨");
+    } else if (usageRate < 40) {
+      const msgs = [
+        `すごすぎるぶー！予算に対してまだ ${Math.round(usageRate)}% しかつかってないぶひ！お財布がパンパンで、ボクのまるまるとしたお腹みたいだぶー！この調子でサクサク貯金しちゃおう！✨🐷`,
+        `ほっくほくだぶー！残り予算が ¥${remainingBudget.toLocaleString()} もあって大富豪の気分だぶひ。ボクの背中のコイン投入口が喜びで震えてるぶー！堅実でとってもえらいぶひ！`
+      ];
+      setPigMessage(msgs[Math.floor(Math.random() * msgs.length)]);
+    } else {
+      const msgs = [
+        `いい感じだぶー！いまのところ残り予算は ¥${remainingBudget.toLocaleString()} だぶひ！計画的でとってもえらいぶー。このまま油断せず、コンビニの誘惑をスルーしつつキープするぶー！`,
+        `順調、順調！お財布のライフはバッチリ残ってるぶひ。無駄遣いトラップを上手に回避してて素晴らしいぶー！自分へのご褒美は月末までちょっとお預けだぶひ？`
+      ];
+      setPigMessage(msgs[Math.floor(Math.random() * msgs.length)]);
+    }
+  };
 
   return (
     <div className="p-6 flex flex-col gap-8">
@@ -100,12 +136,19 @@ export default function HomePage() {
             ぽっぷ<span className="text-emerald-500">家計簿</span>
           </h1>
         </div>
-        <div className="w-12 h-12 rounded-2xl bg-amber-200 border-2 border-slate-800 flex items-center justify-center font-black text-xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+        
+        {/* 💡 🐷 を button に変更し、ポコッと凹むアニメーションと通知エフェクトを追加 */}
+        <button 
+          onClick={handlePigTalk}
+          className="w-12 h-12 rounded-2xl bg-amber-200 border-2 border-slate-800 flex items-center justify-center font-black text-xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0px_0px_0px_0px_rgba(15,23,42,1)] transition-all relative"
+        >
           🐷
-        </div>
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full border border-white animate-ping" />
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full border border-white" />
+        </button>
       </div>
 
-      {/* 今月のステータス（元のデザインそのまま！） */}
+      {/* 今月のステータス */}
       <div className="bg-amber-100 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2">
         <p className="text-xs font-bold text-slate-600">今月のつかったお金</p>
         <div className="flex items-baseline gap-2">
@@ -124,7 +167,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* 📊 予算・過不足メーターカード（元の世界観にジャストフィット！） */}
+      {/* 📊 予算・過不足メーターカード */}
       {!loading && totalBudget > 0 && (
         <div className={`border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-3 transition-all ${
           isOverBudget ? 'bg-rose-100' : 'bg-emerald-100/60'
@@ -172,7 +215,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* メニューボタン一覧（元のデザイン100%維持！） */}
+      {/* メニューボタン一覧 */}
       <div className="flex flex-col gap-5">
         <p className="text-sm font-black text-slate-400 uppercase tracking-widest px-1">メニュー</p>
         
@@ -195,6 +238,38 @@ export default function HomePage() {
           );
         })}
       </div>
+
+      {/* 💡 【新規追加】ブタさんAIアドバイス用ポップアップ（モーダル） */}
+      {pigMessage && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-5 z-50 animate-in fade-in duration-200">
+          <div className="bg-white border-4 border-slate-800 rounded-3xl w-full max-w-sm shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] overflow-hidden">
+            <div className="bg-pink-100 border-b-2 border-slate-800 p-4 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🐷</span>
+                <span className="font-black text-sm text-pink-950 tracking-wide">AIブタのトントン診断</span>
+              </div>
+              <button onClick={() => setPigMessage(null)} className="w-8 h-8 bg-white border-2 border-slate-800 rounded-xl flex items-center justify-center active:bg-slate-100">
+                <X className="w-4 h-4 text-slate-800" strokeWidth={3} />
+              </button>
+            </div>
+            <div className="p-5 flex flex-col gap-4 bg-pink-50/30">
+              <div className="bg-white border-2 border-slate-800 rounded-2xl p-4 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] relative">
+                {/* 吹き出しの三角ピン */}
+                <div className="absolute -top-2.5 right-6 w-4 h-4 bg-white border-t-2 border-l-2 border-slate-800 rotate-45" />
+                <p className="text-sm font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">
+                  {pigMessage}
+                </p>
+              </div>
+              <button 
+                onClick={() => setPigMessage(null)}
+                className="w-full bg-slate-900 text-white font-black py-2.5 rounded-xl border-2 border-slate-800 text-xs active:translate-y-[2px] transition-all"
+              >
+                わかったぶー！ 👍
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <p className="text-center text-xs font-bold text-slate-400 mt-4">
         今日もサクッと記録しよう！ ✨
