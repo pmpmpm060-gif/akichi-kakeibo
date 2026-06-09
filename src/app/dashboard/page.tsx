@@ -10,6 +10,7 @@ interface Category {
   id: string;
   name: string;
   type: 'expense' | 'income';
+  icon: string; // 💡 型定義にiconを追加
 }
 
 interface Transaction {
@@ -19,7 +20,8 @@ interface Transaction {
   amount: number;
   date: string;
   description: string;
-  categories: { name: string } | null;
+  // 💡 リレーション先の取得項目に type と icon を追加
+  categories: { name: string; type: 'expense' | 'income'; icon: string } | null;
 }
 
 export default function DashboardPage() {
@@ -51,7 +53,7 @@ export default function DashboardPage() {
   // 予実あんないの開閉状態
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
 
-  // 💡 【新機能】サブ画面（モーダル）用の状態管理
+  // サブ画面（モーダル）用の状態管理
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
@@ -68,7 +70,7 @@ export default function DashboardPage() {
 
     const { data: catData } = await supabase.from('categories').select('*');
     if (catData) {
-      setCategories(catData);
+      setCategories(catData as Category[]);
       if (catData.length > 0 && !categoryId) setCategoryId(catData[0].id);
     }
 
@@ -83,9 +85,10 @@ export default function DashboardPage() {
     const lastDay = new Date(jstYear, currentDate.getMonth() + 1, 0).getDate();
     const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
+    // 💡 リレーションのselectを categories(name, type, icon) に拡張！
     const { data: transData } = await supabase
       .from('transactions')
-      .select('*, categories(name)')
+      .select('*, categories(name, type, icon)')
       .gte('date', startOfMonth)
       .lte('date', safeEndOfMonth)
       .order('date', { ascending: false });
@@ -106,6 +109,7 @@ export default function DashboardPage() {
     const selectedCategory = categories.find(c => c.id === categoryId);
     if (!selectedCategory) return;
 
+    // 💡 挿入時も、新しくなったcategories構造を一緒にselectして取得する
     const { data, error } = await supabase
       .from('transactions')
       .insert([{
@@ -115,7 +119,7 @@ export default function DashboardPage() {
         date,
         description
       }])
-      .select('*, categories(name)');
+      .select('*, categories(name, type, icon)');
 
     if (error) {
       alert('登録に失敗しました：' + error.message);
@@ -127,7 +131,7 @@ export default function DashboardPage() {
     }
   };
 
-  // 💡 【新機能】実績の修正（アップデート）
+  // 実績の修正（アップデート）
   const handleUpdateTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTransaction || !editingTransaction.amount) return;
@@ -144,10 +148,11 @@ export default function DashboardPage() {
     if (error) {
       alert('修正に失敗しました：' + error.message);
     } else {
-      // 画面のデータを更新
+      // 💡 画面のデータを更新する際、categoriesの中身（名前・タイプ・アイコン）も正しく引き直す
+      const targetCategory = categories.find(c => c.id === editingTransaction.category_id);
       setTransactions(transactions.map(t => t.id === editingTransaction.id ? {
         ...editingTransaction,
-        categories: categories.find(c => c.id === editingTransaction.category_id) ? { name: categories.find(c => c.id === editingTransaction.category_id)!.name } : null
+        categories: targetCategory ? { name: targetCategory.name, type: targetCategory.type, icon: targetCategory.icon } : null
       } : t));
       setEditingTransaction(null);
       router.refresh();
@@ -161,7 +166,7 @@ export default function DashboardPage() {
     if (error) alert('削除に失敗しました：' + error.message);
     else {
       setTransactions(transactions.filter(t => t.id !== id));
-      setEditingTransaction(null); // モーダルが開いていたら閉じる
+      setEditingTransaction(null);
       router.refresh();
     }
   };
@@ -177,19 +182,17 @@ export default function DashboardPage() {
       return { ...cat, actual: totalActual, budget };
     });
 
-  // 💡 【新機能】カレンダー作成用ロジック
+  // カレンダー作成用ロジック
   const getCalendarDays = () => {
     const start = new Date(jstYear, currentDate.getMonth(), 1);
     const end = new Date(jstYear, currentDate.getMonth() + 1, 0);
     const days = [];
     
-    // 1日の曜日（0:日 〜 6:土）に合わせて、空のマス目を埋める
     const startDayOfWeek = start.getDay();
     for (let i = 0; i < startDayOfWeek; i++) {
       days.push(null);
     }
     
-    // 日にちを追加
     for (let i = 1; i <= end.getDate(); i++) {
       days.push(i);
     }
@@ -242,7 +245,8 @@ export default function DashboardPage() {
                 <label className="text-xs font-black text-emerald-900 pl-1">分類</label>
                 <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full px-3 py-2 rounded-xl border-2 border-slate-800 font-bold text-sm bg-white">
                   {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.type === 'expense' ? '💸' : '💰'} {c.name}</option>
+                    /* 💡 固定文字だった部分を、DB内のカスタム絵文字（c.icon）に連動！ */
+                    <option key={c.id} value={c.id}>{c.icon || (c.type === 'expense' ? '💸' : '💰')} {c.name}</option>
                   ))}
                 </select>
               </div>
@@ -285,7 +289,10 @@ export default function DashboardPage() {
                   return (
                     <div key={item.id} className={`p-4 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2 ${isOver ? 'bg-rose-50/50' : ''}`}>
                       <div className="flex justify-between items-center">
-                        <span className="font-black text-sm text-slate-800">{item.name}</span>
+                        {/* 💡 予実のタイトル部分にも、カテゴリ固有のアイコンを表示！ */}
+                        <span className="font-black text-sm text-slate-800 flex items-center gap-1.5">
+                          <span className="text-base">{item.icon || "💸"}</span> {item.name}
+                        </span>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-slate-500">¥{item.actual.toLocaleString()} / ¥{item.budget.toLocaleString()}</span>
                           {isOver && (
@@ -305,22 +312,19 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* 💡 【新機能】カレンダー履歴セクション */}
+          {/* カレンダー履歴セクション */}
           <div className="flex flex-col gap-3">
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">今月のきろくカレンダー 📅</p>
             
             <div className="bg-white border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-              {/* 曜日ヘッダー */}
               <div className="grid grid-cols-7 gap-1 text-center text-xs font-black text-slate-400 mb-2">
                 <span className="text-rose-500">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span className="text-sky-500">土</span>
               </div>
               
-              {/* 日付マス目 */}
               <div className="grid grid-cols-7 gap-1.5">
                 {calendarDays.map((day, index) => {
                   if (day === null) return <div key={`empty-${index}`} />;
                   
-                  // この日の合計金額を算出する
                   const formattedDay = String(day).padStart(2, '0');
                   const targetDateStr = `${yearMonth}-${formattedDay}`;
                   const dayTransactions = transactions.filter(t => t.date === targetDateStr);
@@ -350,7 +354,7 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* 💡 【新機能】サブ画面ポップアップ（モーダル） */}
+      {/* サブ画面ポップアップ（モーダル） */}
       {selectedDate && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 z-50">
           <div className="bg-white border-4 border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
@@ -377,7 +381,8 @@ export default function DashboardPage() {
                       className="w-full px-3 py-2 rounded-xl border-2 border-slate-800 font-bold text-sm bg-white"
                     >
                       {categories.map(c => (
-                        <option key={c.id} value={c.id}>{c.type === 'expense' ? '💸' : '💰'} {c.name}</option>
+                        /* 💡 修正フォーム内でもカスタムアイコンを連動 */
+                        <option key={c.id} value={c.id}>{c.icon || (c.type === 'expense' ? '💸' : '💰')} {c.name}</option>
                       ))}
                     </select>
                   </div>
@@ -415,10 +420,16 @@ export default function DashboardPage() {
                     <p className="text-center text-sm font-bold text-slate-400 py-6">この日のきろくはありません 🍃</p>
                   ) : (
                     transactions.filter(t => t.date === selectedDate).map(t => (
-                      <div key={t.id} className="flex items-center justify-between p-3.5 bg-slate-50 border-2 border-slate-800 rounded-xl">
-                        <div className="flex flex-col">
-                          <span className="font-black text-xs text-slate-400">{t.categories?.name || '未分類'}</span>
-                          <span className="font-bold text-sm text-slate-700 mt-0.5">{t.description || 'メモなし'}</span>
+                      <div key={t.id} className="flex items-center justify-between p-3.5 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+                        <div className="flex items-center gap-2.5">
+                          {/* 💡 履歴リストの左側に、新しく丸枠のカスタムアイコン表示エリアを追加して可愛く！ */}
+                          <div className="w-9 h-9 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-lg shrink-0">
+                            {t.categories?.icon || (t.type === 'expense' ? '💸' : '💰')}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-black text-xs text-slate-400">{t.categories?.name || '未分類'}</span>
+                            <span className="font-bold text-sm text-slate-700 mt-0.5">{t.description || 'メモなし'}</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`font-black text-sm mr-1 ${t.type === 'expense' ? 'text-rose-500' : 'text-emerald-500'}`}>
