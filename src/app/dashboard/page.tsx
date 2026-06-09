@@ -3,14 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle, ChevronDown, ChevronUp, X, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Category {
   id: string;
   name: string;
   type: 'expense' | 'income';
-  icon: string; // 💡 型定義にiconを追加
+  icon: string;
 }
 
 interface Transaction {
@@ -20,7 +20,6 @@ interface Transaction {
   amount: number;
   date: string;
   description: string;
-  // 💡 リレーション先の取得項目に type と icon を追加
   categories: { name: string; type: 'expense' | 'income'; icon: string } | null;
 }
 
@@ -85,7 +84,6 @@ export default function DashboardPage() {
     const lastDay = new Date(jstYear, currentDate.getMonth() + 1, 0).getDate();
     const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
-    // 💡 リレーションのselectを categories(name, type, icon) に拡張！
     const { data: transData } = await supabase
       .from('transactions')
       .select('*, categories(name, type, icon)')
@@ -109,7 +107,6 @@ export default function DashboardPage() {
     const selectedCategory = categories.find(c => c.id === categoryId);
     if (!selectedCategory) return;
 
-    // 💡 挿入時も、新しくなったcategories構造を一緒にselectして取得する
     const { data, error } = await supabase
       .from('transactions')
       .insert([{
@@ -131,7 +128,7 @@ export default function DashboardPage() {
     }
   };
 
-  // 実績の修正（アップデート）
+  // 実績の修正
   const handleUpdateTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTransaction || !editingTransaction.amount) return;
@@ -148,7 +145,6 @@ export default function DashboardPage() {
     if (error) {
       alert('修正に失敗しました：' + error.message);
     } else {
-      // 💡 画面のデータを更新する際、categoriesの中身（名前・タイプ・アイコン）も正しく引き直す
       const targetCategory = categories.find(c => c.id === editingTransaction.category_id);
       setTransactions(transactions.map(t => t.id === editingTransaction.id ? {
         ...editingTransaction,
@@ -171,16 +167,17 @@ export default function DashboardPage() {
     }
   };
 
-  // --- 集計ロジック ---
-  const expenseSummary = categories
-    .filter(c => c.type === 'expense')
-    .map(cat => {
-      const totalActual = transactions
-        .filter(t => t.category_id === cat.id && t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0);
-      const budget = budgets[cat.id] || 0;
-      return { ...cat, actual: totalActual, budget };
-    });
+  // --- 💡 集計ロジック（収入と支出をそれぞれ集計） ---
+  const summaryData = categories.map(cat => {
+    const totalActual = transactions
+      .filter(t => t.category_id === cat.id && t.type === cat.type)
+      .reduce((sum, t) => sum + t.amount, 0);
+    const budget = budgets[cat.id] || 0;
+    return { ...cat, actual: totalActual, budget };
+  });
+
+  const incomeSummary = summaryData.filter(item => item.type === 'income');
+  const expenseSummary = summaryData.filter(item => item.type === 'expense');
 
   // カレンダー作成用ロジック
   const getCalendarDays = () => {
@@ -245,7 +242,6 @@ export default function DashboardPage() {
                 <label className="text-xs font-black text-emerald-900 pl-1">分類</label>
                 <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full px-3 py-2 rounded-xl border-2 border-slate-800 font-bold text-sm bg-white">
                   {categories.map(c => (
-                    /* 💡 固定文字だった部分を、DB内のカスタム絵文字（c.icon）に連動！ */
                     <option key={c.id} value={c.id}>{c.icon || (c.type === 'expense' ? '💸' : '💰')} {c.name}</option>
                   ))}
                 </select>
@@ -267,7 +263,7 @@ export default function DashboardPage() {
             </button>
           </form>
 
-          {/* グラフ ＆ 予実差異セクション */}
+          {/* 💡 グラフ ＆ 予実差異セクション（収入・支出両対応版） */}
           <div className="flex flex-col gap-2">
             <button onClick={() => setIsSummaryOpen(!isSummaryOpen)} className="flex justify-between items-center w-full px-1 py-2 text-left">
               <p className="text-xs font-black text-slate-400 uppercase tracking-widest">今月の予実あんない 📊</p>
@@ -281,33 +277,72 @@ export default function DashboardPage() {
             </button>
 
             {isSummaryOpen && (
-              <div className="flex flex-col gap-3 transition-all duration-300">
-                {expenseSummary.map(item => {
-                  const percent = item.budget > 0 ? Math.min((item.actual / item.budget) * 100, 100) : 0;
-                  const isOver = item.actual > item.budget && item.budget > 0;
+              <div className="flex flex-col gap-5 transition-all duration-300">
+                
+                {/* 💡 1. 収入の達成進捗 */}
+                {incomeSummary.length > 0 && (
+                  <div className="flex flex-col gap-2.5">
+                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">💰 収入の達成スピード</p>
+                    {incomeSummary.map(item => {
+                      const percent = item.budget > 0 ? Math.min((item.actual / item.budget) * 100, 100) : 0;
+                      const isAchieved = item.actual >= item.budget && item.budget > 0;
 
-                  return (
-                    <div key={item.id} className={`p-4 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2 ${isOver ? 'bg-rose-50/50' : ''}`}>
-                      <div className="flex justify-between items-center">
-                        {/* 💡 予実のタイトル部分にも、カテゴリ固有のアイコンを表示！ */}
-                        <span className="font-black text-sm text-slate-800 flex items-center gap-1.5">
-                          <span className="text-base">{item.icon || "💸"}</span> {item.name}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-slate-500">¥{item.actual.toLocaleString()} / ¥{item.budget.toLocaleString()}</span>
-                          {isOver && (
-                            <span className="text-[10px] font-black bg-rose-500 text-white px-1.5 py-0.5 rounded border border-slate-800 flex items-center gap-0.5">
-                              <AlertTriangle className="w-3 h-3" /> オーバー！
+                      return (
+                        <div key={item.id} className={`p-4 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2 ${isAchieved ? 'bg-emerald-50/40' : ''}`}>
+                          <div className="flex justify-between items-center">
+                            <span className="font-black text-sm text-slate-800 flex items-center gap-1.5">
+                              <span className="text-base">{item.icon || "💰"}</span> {item.name}
                             </span>
-                          )}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-500">¥{item.actual.toLocaleString()} / ¥{item.budget.toLocaleString()}</span>
+                              {isAchieved && (
+                                <span className="text-[10px] font-black bg-emerald-500 text-white px-1.5 py-0.5 rounded border border-slate-800 flex items-center gap-0.5">
+                                  <CheckCircle2 className="w-3 h-3" /> 達成！
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="w-full h-4 bg-slate-100 border-2 border-slate-800 rounded-full overflow-hidden p-[1px]">
+                            <div className={`h-full rounded-full border-r border-slate-800 transition-all duration-500 ${isAchieved ? 'bg-emerald-400' : 'bg-teal-300'}`} style={{ width: `${percent}%` }} />
+                          </div>
                         </div>
-                      </div>
-                      <div className="w-full h-4 bg-slate-100 border-2 border-slate-800 rounded-full overflow-hidden p-[1px]">
-                        <div className={`h-full rounded-full border-r border-slate-800 transition-all duration-500 ${isOver ? 'bg-rose-400' : percent > 80 ? 'bg-amber-400' : 'bg-emerald-400'}`} style={{ width: `${percent}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* 💡 2. 支出の予算枠 */}
+                {expenseSummary.length > 0 && (
+                  <div className="flex flex-col gap-2.5">
+                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">💸 支出の残り枠</p>
+                    {expenseSummary.map(item => {
+                      const percent = item.budget > 0 ? Math.min((item.actual / item.budget) * 100, 100) : 0;
+                      const isOver = item.actual > item.budget && item.budget > 0;
+
+                      return (
+                        <div key={item.id} className={`p-4 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2 ${isOver ? 'bg-rose-50/50' : ''}`}>
+                          <div className="flex justify-between items-center">
+                            <span className="font-black text-sm text-slate-800 flex items-center gap-1.5">
+                              <span className="text-base">{item.icon || "💸"}</span> {item.name}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-500">¥{item.actual.toLocaleString()} / ¥{item.budget.toLocaleString()}</span>
+                              {isOver && (
+                                <span className="text-[10px] font-black bg-rose-500 text-white px-1.5 py-0.5 rounded border border-slate-800 flex items-center gap-0.5">
+                                  <AlertTriangle className="w-3 h-3" /> オーバー！
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="w-full h-4 bg-slate-100 border-2 border-slate-800 rounded-full overflow-hidden p-[1px]">
+                            <div className={`h-full rounded-full border-r border-slate-800 transition-all duration-500 ${isOver ? 'bg-rose-400' : percent > 80 ? 'bg-amber-400' : 'bg-sky-400'}`} style={{ width: `${percent}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
               </div>
             )}
           </div>
@@ -381,7 +416,6 @@ export default function DashboardPage() {
                       className="w-full px-3 py-2 rounded-xl border-2 border-slate-800 font-bold text-sm bg-white"
                     >
                       {categories.map(c => (
-                        /* 💡 修正フォーム内でもカスタムアイコンを連動 */
                         <option key={c.id} value={c.id}>{c.icon || (c.type === 'expense' ? '💸' : '💰')} {c.name}</option>
                       ))}
                     </select>
@@ -422,7 +456,6 @@ export default function DashboardPage() {
                     transactions.filter(t => t.date === selectedDate).map(t => (
                       <div key={t.id} className="flex items-center justify-between p-3.5 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
                         <div className="flex items-center gap-2.5">
-                          {/* 💡 履歴リストの左側に、新しく丸枠のカスタムアイコン表示エリアを追加して可愛く！ */}
                           <div className="w-9 h-9 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-lg shrink-0">
                             {t.categories?.icon || (t.type === 'expense' ? '💸' : '💰')}
                           </div>
@@ -435,11 +468,9 @@ export default function DashboardPage() {
                           <span className={`font-black text-sm mr-1 ${t.type === 'expense' ? 'text-rose-500' : 'text-emerald-500'}`}>
                             {t.type === 'expense' ? '-' : '+'}¥{t.amount.toLocaleString()}
                           </span>
-                          {/* 修正ボタン */}
                           <button onClick={() => setEditingTransaction(t)} className="text-xs bg-white border border-slate-400 font-bold px-2 py-1 rounded-md text-slate-600 active:bg-slate-100">
                             直す
                           </button>
-                          {/* 取り消し（削除）ボタン */}
                           <button onClick={() => handleDeleteTransaction(t.id)} className="text-slate-400 hover:text-rose-500 p-1">
                             <Trash2 className="w-4 h-4" />
                           </button>
