@@ -59,8 +59,16 @@ export async function middleware(req: NextRequest) {
   return res;
 }
 
+// （上のコードはそのまま触らず、一番下のここだけを書き換えます）
+
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    /*
+     * 💡 見張る対象を「トップ画面（/）」と「家計簿入力（/dashboard）」だけに限定します！
+     * これにより、ログイン画面自体や、裏側の細かいファイル読み込みの時は
+     * Supabaseへの通信を完全にスキップして爆速になります。
+     */
+    '/',
+    '/dashboard/:path*',
   ],
 };
