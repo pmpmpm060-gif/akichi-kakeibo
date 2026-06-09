@@ -44,11 +44,10 @@ export default function LoginPage() {
         console.log("セッション情報:", data.session ? "クッキー保存OK" : "セッション空っぽ？");
 
         // 確実にクッキーがブラウザに書き込まれるのを少し待ってリダイレクト
-        setTimeout(() => {
-          console.log("🚀 画面をトップ（/）に切り替えます...");
-          router.push('/');
-          router.refresh();
-        }, 500);
+setTimeout(() => {
+  console.log("🚀 画面をトップ（/）に強制遷移（リロード型）します...");
+  window.location.href = '/';
+}, 500);
       }
     } catch (err) {
       // 📝 【ログ4】予期せぬクラッシュが起きた場合
