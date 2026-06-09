@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr'; // 💡 SSR対応のクライアントに変更
+import { createBrowserClient } from '@supabase/ssr';
 import { Loader2, Lock, Mail, Sparkles } from 'lucide-react';
 
 export default function LoginPage() {
@@ -12,7 +12,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // 💡 ミドルウェアと完全に同期するSupabaseクライアントをここで作成
+  // あなたのSupabaseのURLとキー
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!; // 👈 ご自身のURLに書き換えてください
   const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // 👈 ご自身のAnon Keyに書き換えてください
   const supabase = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -22,22 +22,39 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMsg('');
 
-    // Supabaseにログインを要請（これでクッキーにバッチリ保存されます）
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    // 📝 【ログ1】ボタンが押されたことを記録
+    console.log("=== 🎫 ログイン処理を開始します ===");
+    console.log("入力されたメールアドレス:", email);
 
-    if (error) {
-      setErrorMsg('メールアドレスかパスワードが違います 😭');
+    try {
+      // Supabaseにログインを要請
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        // 📝 【ログ2】Supabase側からエラーが返ってきた場合
+        console.error("❌ Supabase認証エラー発生:", error.status, error.message);
+        setErrorMsg(`エラー: ${error.message} 😭`);
+        setLoading(false);
+      } else {
+        // 📝 【ログ3】認証自体は成功した場合
+        console.log("✅ Supabase認証成功！ユーザーID:", data.user?.id);
+        console.log("セッション情報:", data.session ? "クッキー保存OK" : "セッション空っぽ？");
+
+        // 確実にクッキーがブラウザに書き込まれるのを少し待ってリダイレクト
+        setTimeout(() => {
+          console.log("🚀 画面をトップ（/）に切り替えます...");
+          router.push('/');
+          router.refresh();
+        }, 500);
+      }
+    } catch (err) {
+      // 📝 【ログ4】予期せぬクラッシュが起きた場合
+      console.error("🚨 システム的なエラーが発生しました:", err);
+      setErrorMsg("通信エラーが発生しました 😭");
       setLoading(false);
-    } else {
-      // 💡 ログイン成功！
-      // 確実にクッキーがブラウザに書き込まれるのを一瞬待ってからリダイレクトします
-      setTimeout(() => {
-        router.push('/');
-        router.refresh();
-      }, 500);
     }
   };
 
@@ -55,7 +72,7 @@ export default function LoginPage() {
 
       <form onSubmit={handleLogin} className="bg-white border-4 border-slate-800 rounded-3xl p-6 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4">
         {errorMsg && (
-          <p className="text-xs font-black text-rose-500 bg-rose-50 border-2 border-rose-500 p-2.5 rounded-xl text-center">
+          <p className="text-xs font-black text-rose-500 bg-rose-50 border-2 border-rose-500 p-2.5 rounded-xl text-center whitespace-pre-wrap">
             {errorMsg}
           </p>
         )}
