@@ -1,5 +1,6 @@
 "use client";
 
+export const dynamic = 'force-dynamic'; // 👈 これを追加！常に最新データを引き出すおまじないです
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Wallet, FolderKanban, PiggyBank, Sparkles, Loader2 } from 'lucide-react';
