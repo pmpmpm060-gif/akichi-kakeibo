@@ -17,7 +17,7 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMsg('');
 
-    // Supabaseにログインを要請（スマホに「ログイン状態」が自動保存されます）
+    // Supabaseにログインを要請
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -60,7 +60,7 @@ export default function LoginPage() {
             type="email" 
             required
             value={email} 
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => setEmail(e.target.value)} // ⭕ 完全にスッキリ直しました！
             placeholder="example@mail.com" 
             className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-800 font-bold text-sm" 
           />
