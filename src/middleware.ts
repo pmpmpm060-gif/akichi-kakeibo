@@ -5,12 +5,12 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 💡 【超重要】トップ画面（/）とダッシュボード（/dashboard）以外は一瞬でスルー
-  // ログイン画面（/login）自体もここで完全にスルーされるため、絶対にループしません
+  // 💡 トップ画面（/）とダッシュボード（/dashboard）以外は一瞬でスルー
   if (pathname !== '/' && !pathname.startsWith('/dashboard')) {
     return NextResponse.next();
   }
 
+  // 最初に応答オブジェクトを作成（ここにクッキーを出し入れします）
   let res = NextResponse.next({
     request: {
       headers: req.headers,
@@ -18,8 +18,8 @@ export async function middleware(req: NextRequest) {
   });
 
   // あなたのSupabaseのURLとキー
-  const SUPABASE_URL = 'https://xxxx.supabase.co'; // 👈 ご自身のURL
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1Ni...'; // 👈 ご自身のAnon Key
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!; // 👈 ご自身のURLに書き換えてください
+  const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // 👈 ご自身のAnon Keyに書き換えてください
 
   const supabase = createServerClient(
     SUPABASE_URL,
@@ -30,6 +30,7 @@ export async function middleware(req: NextRequest) {
           return req.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
+          // 💡 ブラウザとサーバーの両方に確実にクッキーをセットする最新の書き方です
           req.cookies.set({ name, value, ...options });
           res = NextResponse.next({
             request: {
@@ -51,10 +52,10 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // ログインユーザーの取得
+  // 💡 重要：getUser() を呼ぶことで、ブラウザから届いたクッキーが正しいかSupabaseが厳密にチェックします
   const { data: { user } } = await supabase.auth.getUser();
 
-  // 💡 ログインしていない場合はログイン画面（/login）へ安全に転送
+  // 💡 もしユーザーがいない（クッキーが届いていない）場合はログイン画面へ
   if (!user) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
