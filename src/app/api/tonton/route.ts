@@ -7,8 +7,8 @@ export async function POST(request: Request) {
 
     // 💡 サーバーサイド（本番環境）の環境変数から安全にキーを取得
     // サーバー側なら「NEXT_PUBLIC_」が付いていない形式でも読み込めます
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-
+// 💡 確実にどちらかのキーを掴むための書き方
+const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "APIキーがサーバーに設定されていませんぶー！" }, { status: 500 });
     }
