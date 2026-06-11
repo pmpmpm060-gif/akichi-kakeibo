@@ -30,3 +30,14 @@ label {
   max-height: min(90dvh, 52rem);
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+.mobile-date-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.mobile-date-input::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}

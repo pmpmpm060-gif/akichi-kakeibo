@@ -300,14 +300,14 @@ function DashboardPageContent() {
               <Plus className="w-5 h-5" strokeWidth={3} /> 今日の支出・収入
             </h2>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="flex flex-col gap-1">
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex min-w-0 flex-col gap-1">
                 <label className="text-xs font-black text-emerald-900 pl-1">いつ？</label>
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-3 py-2 text-center text-base font-bold" />
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mobile-date-input min-h-12 min-w-0 max-w-full rounded-xl border-2 border-slate-800 px-3 py-2 text-base font-bold" />
               </div>
-              <div className="flex flex-col gap-1">
+              <div className="flex min-w-0 flex-col gap-1">
                 <label className="text-xs font-black text-emerald-900 pl-1">分類</label>
-                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="min-h-12 w-full rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-base font-bold">
+                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="min-h-12 min-w-0 max-w-full rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-base font-bold">
                   {categories.map(c => (
                     <option key={c.id} value={c.id}>{c.icon || (c.type === 'expense' ? '💸' : '💰')} {c.name}</option>
                   ))}
