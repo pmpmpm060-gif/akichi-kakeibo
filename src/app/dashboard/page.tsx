@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle, ChevronDown, ChevronUp, X, CheckCircle2, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { parseHouseholdUser } from '../../lib/household-users';
 
 interface Category {
   id: string;
@@ -28,7 +29,7 @@ interface Transaction {
 function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const currentUser = searchParams.get('user') || 'user_a';
+  const currentUser = parseHouseholdUser(searchParams.get('user'));
 
   // 安全な日付・月の状態管理（JSTベース）
   const [currentDate, setCurrentDate] = useState(() => new Date());

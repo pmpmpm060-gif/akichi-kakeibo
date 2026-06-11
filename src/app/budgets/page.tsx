@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { parseHouseholdUser } from '../../lib/household-users';
 
 interface Category {
   id: string;
@@ -22,7 +23,7 @@ interface Budget {
 // 💡 メインの処理を行うコンポーネント
 function BudgetsPageContent() {
   const searchParams = useSearchParams();
-  const currentUser = searchParams.get('user') || 'user_a';
+  const currentUser = parseHouseholdUser(searchParams.get('user'));
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<{ [key: string]: number }>({});
@@ -78,7 +79,7 @@ function BudgetsPageContent() {
 
     const { error } = await supabase
       .from('budgets')
-      .upsert(upsertData, { onConflict: 'user_id,category_id' }); 
+      .upsert(upsertData, { onConflict: 'household_id,user_id,category_id' });
 
     if (error) {
       alert('予算の保存に失敗しました：' + error.message);
