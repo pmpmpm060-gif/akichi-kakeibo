@@ -55,6 +55,8 @@ export type Database = {
       }
       categories: {
         Row: {
+          carryover_enabled: boolean
+          carryover_start_month: string | null
           created_at: string
           household_id: string
           icon: string | null
@@ -64,6 +66,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          carryover_enabled?: boolean
+          carryover_start_month?: string | null
           created_at?: string
           household_id?: string
           icon?: string | null
@@ -73,6 +77,8 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          carryover_enabled?: boolean
+          carryover_start_month?: string | null
           created_at?: string
           household_id?: string
           icon?: string | null
@@ -196,9 +202,23 @@ export type Database = {
         Args: { target_category_id: string }
         Returns: number
       }
+      get_effective_budgets: {
+        Args: { target_month: string; target_user_id: string }
+        Returns: {
+          amount: number
+          base_amount: number
+          carryover_amount: number
+          category_id: string
+          category_type: string
+        }[]
+      }
       is_household_member: {
         Args: { target_household_id: string }
         Returns: boolean
+      }
+      save_user_budgets: {
+        Args: { budget_entries: Json; target_user_id: string }
+        Returns: number
       }
     }
     Enums: {

@@ -9,7 +9,6 @@ import { DataErrorCard } from '../../components/data-error-card';
 import type { Category } from '../../lib/database-helpers';
 import { parseHouseholdUser } from '../../lib/household-users';
 
-// ユーザーが選べるポップな絵文字パレットの候補
 // ユーザーが選べるポップな絵文字パレットの候補（インフラ・通信・たばこを追加！）
 const ICON_PALETTE = [
   "🍔", "🛍️", "🚗", "🏠", "✨", "🍿", "🎮", "🐱", "💪", "💴", "🎁",
@@ -162,7 +161,7 @@ function CategoriesPageContent() {
         className="bg-pink-100 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4"
       >
         <h2 className="font-black text-base text-pink-950 flex items-center gap-1.5">
-          <Plus className="w-5 h-5" strokeWidth={3} /> あたらしいカテゴリ
+          <Plus className="w-5 h-5" strokeWidth={3} /> 新しいカテゴリ
         </h2>
 
         {/* 収支タイプ切り替え */}
@@ -183,9 +182,9 @@ function CategoriesPageContent() {
           </button>
         </div>
 
-        {/* アイコンをえらぶ */}
+        {/* アイコンを選ぶ */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-black text-pink-900 pl-1">アイコンをえらぶ</label>
+          <label className="text-xs font-black text-pink-900 pl-1">アイコンを選ぶ</label>
           <div className="grid grid-cols-6 gap-2 bg-white/80 p-3 rounded-2xl border-2 border-slate-800">
             {ICON_PALETTE.map((icon) => (
               <button

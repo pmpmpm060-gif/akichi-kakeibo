@@ -6,7 +6,7 @@ const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "ぽっぷ家計簿",
-  description: "楽しくつづける家計簿アプリ",
+  description: "楽しく続ける家計簿アプリ",
 };
 
 export default function RootLayout({

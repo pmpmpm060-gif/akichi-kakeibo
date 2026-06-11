@@ -15,36 +15,20 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMsg('');
 
-    // 📝 【ログ1】ボタンが押されたことを記録
-    console.log("=== 🎫 ログイン処理を開始します ===");
-    console.log("入力されたメールアドレス:", email);
-
     try {
-      // Supabaseにログインを要請
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        // 📝 【ログ2】Supabase側からエラーが返ってきた場合
-        console.error("❌ Supabase認証エラー発生:", error.status, error.message);
         setErrorMsg(`エラー: ${error.message} 😭`);
         setLoading(false);
       } else {
-        // 📝 【ログ3】認証自体は成功した場合
-        console.log("✅ Supabase認証成功！ユーザーID:", data.user?.id);
-        console.log("セッション情報:", data.session ? "クッキー保存OK" : "セッション空っぽ？");
-
-        // 確実にクッキーがブラウザに書き込まれるのを少し待ってリダイレクト
-setTimeout(() => {
-  console.log("🚀 画面をトップ（/）に強制遷移（リロード型）します...");
-  window.location.href = '/';
-}, 500);
+        window.location.href = '/';
       }
     } catch (err) {
-      // 📝 【ログ4】予期せぬクラッシュが起きた場合
-      console.error("🚨 システム的なエラーが発生しました:", err);
+      console.error("Login failed unexpectedly:", err);
       setErrorMsg("通信エラーが発生しました 😭");
       setLoading(false);
     }

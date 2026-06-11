@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'; // 💡 Suspense をインポート
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Repeat2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
@@ -16,6 +16,7 @@ function BudgetsPageContent() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<{ [key: string]: number }>({});
+  const [carryoverSettings, setCarryoverSettings] = useState<{ [key: string]: boolean }>({});
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -45,7 +46,12 @@ function BudgetsPageContent() {
       const catData = categoryResult.data;
       const budgetData = budgetResult.data;
 
-      if (catData) setCategories(catData);
+      if (catData) {
+        setCategories(catData);
+        setCarryoverSettings(
+          Object.fromEntries(catData.map((category) => [category.id, category.carryover_enabled]))
+        );
+      }
 
       const budgetMap: { [key: string]: number } = {};
       budgetData?.forEach((budget: Pick<Budget, 'category_id' | 'amount'>) => {
@@ -76,22 +82,29 @@ function BudgetsPageContent() {
     });
   };
 
+  const handleCarryoverChange = (categoryId: string, enabled: boolean) => {
+    setCarryoverSettings({
+      ...carryoverSettings,
+      [categoryId]: enabled,
+    });
+  };
+
   const handleSaveBudgets = async () => {
     setIsSaving(true);
-    const upsertData = categories.map((cat) => ({
-      user_id: currentUser,
+    const budgetEntries = categories.map((cat) => ({
       category_id: cat.id,
       amount: budgets[cat.id] || 0,
+      carryover_enabled: carryoverSettings[cat.id] || false,
     }));
 
-    const { error } = await supabase
-      .from('budgets')
-      .upsert(upsertData, { onConflict: 'household_id,user_id,category_id' });
-
+    const { error } = await supabase.rpc('save_user_budgets', {
+      target_user_id: currentUser,
+      budget_entries: budgetEntries,
+    });
     if (error) {
       alert('予算の保存に失敗しました：' + error.message);
     } else {
-      alert('基本予算をほぞんしたよ！ 🐷✨');
+      alert('基本予算と繰越設定を保存しました！ 🐷✨');
     }
     setIsSaving(false);
   };
@@ -108,16 +121,28 @@ function BudgetsPageContent() {
         <span className="font-black text-sm text-slate-800 flex items-center gap-2">
           <span className="text-xl">{cat.icon || (cat.type === 'income' ? "💰" : "💸")}</span> {cat.name}
         </span>
-        <div className="flex items-center gap-1.5 max-w-[140px]">
-          <input
-            type="number"
-            inputMode="numeric"
-            value={budgets[cat.id] === undefined ? "" : budgets[cat.id]}
-            onChange={(e) => handleAmountChange(cat.id, e.target.value)}
-            placeholder="0"
-            className={`w-full px-3 py-2 rounded-xl border-2 border-slate-800 text-right font-black text-sm focus:outline-none ${cat.type === 'income' ? 'focus:bg-emerald-50' : 'focus:bg-sky-50'}`}
-          />
-          <span className="font-black text-xs text-slate-500 shrink-0">円</span>
+        <div className="flex flex-col items-end gap-2 max-w-[155px]">
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              inputMode="numeric"
+              value={budgets[cat.id] === undefined ? "" : budgets[cat.id]}
+              onChange={(e) => handleAmountChange(cat.id, e.target.value)}
+              placeholder="0"
+              className={`w-full px-3 py-2 rounded-xl border-2 border-slate-800 text-right font-black text-sm focus:outline-none ${cat.type === 'income' ? 'focus:bg-emerald-50' : 'focus:bg-sky-50'}`}
+            />
+            <span className="font-black text-xs text-slate-500 shrink-0">円</span>
+          </div>
+          <label className="flex items-center gap-1.5 text-[10px] font-black text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={carryoverSettings[cat.id] || false}
+              onChange={(e) => handleCarryoverChange(cat.id, e.target.checked)}
+              className="accent-sky-500"
+            />
+            <Repeat2 className="w-3.5 h-3.5" />
+            余り・超過を繰越
+          </label>
         </div>
       </div>
     ));
@@ -133,7 +158,7 @@ function BudgetsPageContent() {
           >
             <ArrowLeft className="w-5 h-5 text-slate-800" strokeWidth={2.5} />
           </Link>
-          <h1 className="text-2xl font-black tracking-tight">予算をきめる</h1>
+          <h1 className="text-2xl font-black tracking-tight">予算を決める</h1>
         </div>
         <span className={`text-[10px] font-black border-2 border-slate-800 px-2.5 py-1 rounded-full shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]
           ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}>
@@ -144,7 +169,7 @@ function BudgetsPageContent() {
       <div className="bg-sky-100 border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center gap-3">
         <div className="text-2xl">💡</div>
         <p className="text-xs font-bold text-sky-950 leading-relaxed">
-          ここで設定した予算は、**毎月共通のベース予算**として自動で使い回されます！毎月入力し直す必要はありません。
+          基本予算は毎月使われます。カテゴリごとに繰越をONにすると、余りも超過も翌月の予算へ反映されます。
         </p>
       </div>
 
@@ -183,7 +208,7 @@ function BudgetsPageContent() {
               disabled={isSaving}
               className="w-full bg-sky-300 text-slate-900 font-black py-4 rounded-2xl border-2 border-slate-800 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] text-sm flex items-center justify-center gap-2 mt-2"
             >
-              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" strokeWidth={2.5} />基本予算をほぞんする！ ✨</>}
+              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" strokeWidth={2.5} />予算と繰越設定を保存する！ ✨</>}
             </button>
           </div>
         )}
