@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import type { Database } from './lib/database.types';
 
 export async function proxy(req: NextRequest) {
   // 最初に応答オブジェクトを作成（ここにクッキーを出し入れします）
@@ -14,7 +15,7 @@ export async function proxy(req: NextRequest) {
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!; // 👈 ご自身のURLに書き換えてください
   const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // 👈 ご自身のAnon Keyに書き換えてください
 
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     SUPABASE_URL,
     SUPABASE_ANON_KEY,
     {

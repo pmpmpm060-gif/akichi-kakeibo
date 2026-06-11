@@ -1,13 +1,19 @@
 "use client";
 
 export const dynamic = 'force-dynamic';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, FolderKanban, PiggyBank, Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
+import { parseHouseholdUser } from '../lib/household-users';
 
-export default function HomePage() {
+function HomePageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentUser = parseHouseholdUser(searchParams.get('user'));
+
   const [totalExpense, setTotalExpense] = useState<number>(0);
   const [totalBudget, setTotalBudget] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -18,9 +24,6 @@ export default function HomePage() {
   const [daysInMonth, setDaysInMonth] = useState<number>(30);
   const [remainingDays, setRemainingDays] = useState<number>(1);
   const [currentDay, setCurrentDay] = useState<number>(1);
-
-  // 💡 ユーザー切り替え用の状態管理（初期値は 'user_a'）
-  const [currentUser, setCurrentUser] = useState<'user_a' | 'user_b'>('user_a');
 
   // 💡 データの取得処理（currentUser が変わるたびに自動で再実行されます）
   useEffect(() => {
@@ -87,7 +90,8 @@ export default function HomePage() {
   const toggleUser = () => {
     setLoading(true);
     setDataError(null);
-    setCurrentUser((prev) => (prev === 'user_a' ? 'user_b' : 'user_a'));
+    const nextUser = currentUser === 'user_a' ? 'user_b' : 'user_a';
+    router.replace(`/?user=${nextUser}`);
   };
 
   const retryFetch = () => {
@@ -113,7 +117,7 @@ export default function HomePage() {
     },
     {
       title: "カテゴリ管理",
-      href: "/categories",
+      href: `/categories?user=${currentUser}`,
       icon: FolderKanban,
       bgColor: "bg-pink-300",
     },
@@ -306,5 +310,17 @@ export default function HomePage() {
         現在のモード: {currentUser === 'user_a' ? 'ママデータ' : 'パパデータ'} 🚀
       </p>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <div className="p-6 flex justify-center py-12">
+        <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+      </div>
+    }>
+      <HomePageContent />
+    </Suspense>
   );
 }

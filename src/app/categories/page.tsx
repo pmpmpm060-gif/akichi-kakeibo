@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, Loader2, Edit2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { DataErrorCard } from '../../components/data-error-card';
+import type { Category } from '../../lib/database-helpers';
+import { parseHouseholdUser } from '../../lib/household-users';
 
 // ユーザーが選べるポップな絵文字パレットの候補
 // ユーザーが選べるポップな絵文字パレットの候補（インフラ・通信・たばこを追加！）
@@ -17,19 +20,16 @@ const ICON_PALETTE = [
   "💻", // ネット
   "🚬"  // たばこ
 ];
-interface Category {
-  id: string;
-  name: string;
-  type: 'expense' | 'income';
-  icon: string;
-}
+function CategoriesPageContent() {
+  const searchParams = useSearchParams();
+  const currentUser = parseHouseholdUser(searchParams.get('user'));
 
-export default function CategoriesPage() {
   // 状態管理
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
   
   // 新規登録用の状態
   const [name, setName] = useState("");
@@ -46,6 +46,7 @@ export default function CategoriesPage() {
       const { data, error } = await supabase
         .from('categories')
         .select('*')
+        .eq('user_id', currentUser)
         .order('created_at', { ascending: false });
 
       if (ignore) return;
@@ -53,7 +54,7 @@ export default function CategoriesPage() {
       if (error) {
         setDataError(error.message);
       } else if (data) {
-        setCategories(data as Category[]);
+        setCategories(data);
       }
       setLoading(false);
     };
@@ -63,7 +64,7 @@ export default function CategoriesPage() {
     return () => {
       ignore = true;
     };
-  }, [retryKey]);
+  }, [currentUser, retryKey]);
 
   const retryFetch = () => {
     setLoading(true);
@@ -78,13 +79,13 @@ export default function CategoriesPage() {
 
     const { data, error } = await supabase
       .from('categories')
-      .insert([{ name, type, icon: selectedIcon }])
+      .insert([{ name, type, icon: selectedIcon, user_id: currentUser }])
       .select();
 
     if (error) {
       alert('追加に失敗しました：' + error.message);
     } else if (data) {
-      setCategories([data[0] as Category, ...categories]);
+      setCategories([data[0], ...categories]);
       setName("");
     }
   };
@@ -113,33 +114,46 @@ export default function CategoriesPage() {
   };
 
   // --- 4. データの削除 (DELETE) ---
-  const handleDeleteCategory = async (id: string) => {
-    if (!confirm('本当にこのカテゴリを削除しますか？\n※このカテゴリを紐づけている家計簿の記録がある場合、表示に影響が出る可能性があります。')) return;
+  const handleDeleteCategory = async (category: Category) => {
+    if (!confirm(`「${category.name}」を削除しますか？\n関連する予算設定も削除されます。家計簿の記録がある場合は削除できません。`)) return;
 
-    const { error } = await supabase
-      .from('categories')
-      .delete()
-      .eq('id', id);
+    setDeletingCategoryId(category.id);
+    const { data: deletedBudgetCount, error } = await supabase
+      .rpc('delete_unused_category', { target_category_id: category.id });
+    setDeletingCategoryId(null);
 
     if (error) {
-      alert('削除に失敗しました：' + error.message);
+      const message = error.message.includes('transaction records')
+        ? 'このカテゴリには家計簿の記録があるため削除できません。先に記録を別カテゴリへ変更してください。'
+        : '削除に失敗しました：' + error.message;
+      alert(message);
     } else {
-      setCategories(categories.filter(cat => cat.id !== id));
-      if (editingCategory?.id === id) setEditingCategory(null); // 編集中のものを消したらモーダルも閉じる
+      setCategories(categories.filter(cat => cat.id !== category.id));
+      if (editingCategory?.id === category.id) setEditingCategory(null);
+      const budgetMessage = deletedBudgetCount > 0
+        ? `関連する予算設定 ${deletedBudgetCount} 件も削除しました。`
+        : '関連する予算設定はありませんでした。';
+      alert(`カテゴリを削除しました。\n${budgetMessage}`);
     }
   };
 
   return (
     <div className="p-6 flex flex-col gap-6">
       {/* ヘッダー */}
-      <div className="flex items-center gap-3 pt-2">
-        <Link 
-          href="/" 
-          className="w-10 h-10 bg-white border-2 border-slate-800 rounded-2xl flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
-        >
-          <ArrowLeft className="w-5 h-5 text-slate-800" strokeWidth={2.5} />
-        </Link>
-        <h1 className="text-2xl font-black tracking-tight">カテゴリ設定</h1>
+      <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/?user=${currentUser}`}
+            className="w-10 h-10 bg-white border-2 border-slate-800 rounded-2xl flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
+          >
+            <ArrowLeft className="w-5 h-5 text-slate-800" strokeWidth={2.5} />
+          </Link>
+          <h1 className="text-2xl font-black tracking-tight">カテゴリ設定</h1>
+        </div>
+        <span className={`text-[10px] font-black border-2 border-slate-800 px-2.5 py-1 rounded-full shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]
+          ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}>
+          {currentUser === 'user_a' ? '👩‍🦰 ママ' : '👨 パパ'}
+        </span>
       </div>
 
       {/* 新規登録カード */}
@@ -251,10 +265,13 @@ export default function CategoriesPage() {
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDeleteCategory(cat.id)}
+                      onClick={() => handleDeleteCategory(cat)}
+                      disabled={deletingCategoryId === cat.id}
                       className="w-9 h-9 text-rose-500 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-center"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      {deletingCategoryId === cat.id
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <Trash2 className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
@@ -355,5 +372,17 @@ export default function CategoriesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CategoriesPage() {
+  return (
+    <Suspense fallback={
+      <div className="p-6 flex justify-center py-12">
+        <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+      </div>
+    }>
+      <CategoriesPageContent />
+    </Suspense>
   );
 }

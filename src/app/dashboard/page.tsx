@@ -7,24 +7,10 @@ import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTrian
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
-
-interface Category {
-  id: string;
-  name: string;
-  type: 'expense' | 'income';
-  icon: string;
-}
-
-interface Transaction {
-  id: string;
-  category_id: string;
-  type: 'expense' | 'income';
-  amount: number;
-  date: string;
-  description: string;
-  user_id: string;
-  categories: { name: string; type: 'expense' | 'income'; icon: string } | null;
-}
+import {
+  type Category,
+  type TransactionWithCategory,
+} from '../../lib/database-helpers';
 
 // 💡 メインのダッシュボード処理を行うコンポーネントに分離
 function DashboardPageContent() {
@@ -47,7 +33,7 @@ function DashboardPageContent() {
 
   // データ用状態管理
   const [categories, setCategories] = useState<Category[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<TransactionWithCategory[]>([]);
   const [budgets, setBudgets] = useState<{ [key: string]: number }>({});
   
   // フォーム用状態管理
@@ -64,7 +50,7 @@ function DashboardPageContent() {
 
   // サブ画面（モーダル）用の状態管理
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<TransactionWithCategory | null>(null);
 
   // 月の切り替え
   const changeMonth = (increment: number) => {
@@ -84,7 +70,7 @@ function DashboardPageContent() {
       const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
       const [categoryResult, budgetResult, transactionResult] = await Promise.all([
-        supabase.from('categories').select('*'),
+        supabase.from('categories').select('*').eq('user_id', currentUser),
         supabase
           .from('budgets')
           .select('category_id, amount')
@@ -112,7 +98,7 @@ function DashboardPageContent() {
       const transData = transactionResult.data;
 
       if (catData) {
-        setCategories(catData as Category[]);
+        setCategories(catData);
         setCategoryId((current) => current || catData[0]?.id || "");
       }
 
@@ -121,7 +107,7 @@ function DashboardPageContent() {
         budgetMap[budget.category_id] = budget.amount;
       });
       setBudgets(budgetMap);
-      setTransactions((transData || []) as unknown as Transaction[]);
+      setTransactions(transData || []);
       setLoading(false);
     };
 
@@ -161,7 +147,7 @@ function DashboardPageContent() {
     if (error) {
       alert('登録に失敗しました：' + error.message);
     } else if (data) {
-      setTransactions([data[0] as unknown as Transaction, ...transactions]);
+      setTransactions([data[0], ...transactions]);
       setAmount("");
       setDescription("");
       router.refresh();
@@ -173,22 +159,26 @@ function DashboardPageContent() {
     e.preventDefault();
     if (!editingTransaction || !editingTransaction.amount) return;
 
+    const targetCategory = categories.find(c => c.id === editingTransaction.category_id);
+    if (!targetCategory) return;
+
     const { error } = await supabase
       .from('transactions')
       .update({
         amount: Number(editingTransaction.amount),
         description: editingTransaction.description,
-        category_id: editingTransaction.category_id
+        category_id: editingTransaction.category_id,
+        type: targetCategory.type,
       })
       .eq('id', editingTransaction.id);
 
     if (error) {
       alert('修正に失敗しました：' + error.message);
     } else {
-      const targetCategory = categories.find(c => c.id === editingTransaction.category_id);
       setTransactions(transactions.map(t => t.id === editingTransaction.id ? {
         ...editingTransaction,
-        categories: targetCategory ? { name: targetCategory.name, type: targetCategory.type, icon: targetCategory.icon } : null
+        type: targetCategory.type,
+        categories: { name: targetCategory.name, type: targetCategory.type, icon: targetCategory.icon }
       } : t));
       setEditingTransaction(null);
       router.refresh();
@@ -241,7 +231,7 @@ function DashboardPageContent() {
       {/* ヘッダー */}
       <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-3">
-          <Link href="/" className="w-10 h-10 bg-white border-2 border-slate-800 rounded-2xl flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+          <Link href={`/?user=${currentUser}`} className="w-10 h-10 bg-white border-2 border-slate-800 rounded-2xl flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
             <ArrowLeft className="w-5 h-5 text-slate-800" strokeWidth={2.5} />
           </Link>
           <h1 className="text-2xl font-black tracking-tight">家計簿をつける</h1>

@@ -7,19 +7,7 @@ import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
-
-interface Category {
-  id: string;
-  name: string;
-  type: 'expense' | 'income';
-  icon: string;
-}
-
-interface Budget {
-  category_id: string;
-  amount: number;
-  user_id: string;
-}
+import type { Budget, Category } from '../../lib/database-helpers';
 
 // 💡 メインの処理を行うコンポーネント
 function BudgetsPageContent() {
@@ -38,7 +26,7 @@ function BudgetsPageContent() {
 
     const fetchData = async () => {
       const [categoryResult, budgetResult] = await Promise.all([
-        supabase.from('categories').select('*'),
+        supabase.from('categories').select('*').eq('user_id', currentUser),
         supabase
           .from('budgets')
           .select('category_id, amount')
@@ -57,10 +45,10 @@ function BudgetsPageContent() {
       const catData = categoryResult.data;
       const budgetData = budgetResult.data;
 
-      if (catData) setCategories(catData as Category[]);
+      if (catData) setCategories(catData);
 
       const budgetMap: { [key: string]: number } = {};
-      budgetData?.forEach((budget: Omit<Budget, 'user_id'>) => {
+      budgetData?.forEach((budget: Pick<Budget, 'category_id' | 'amount'>) => {
         budgetMap[budget.category_id] = budget.amount;
       });
       setBudgets(budgetMap);
@@ -170,7 +158,7 @@ function BudgetsPageContent() {
         ) : categories.length === 0 ? (
           <div className="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-8 text-center">
             <p className="text-sm font-bold text-slate-400 mb-3">まずはカテゴリを追加してね！</p>
-            <Link href="/categories" className="text-xs font-black bg-pink-300 text-slate-900 px-4 py-2 rounded-xl border-2 border-slate-800 inline-block">
+            <Link href={`/categories?user=${currentUser}`} className="text-xs font-black bg-pink-300 text-slate-900 px-4 py-2 rounded-xl border-2 border-slate-800 inline-block">
               カテゴリ設定へ 🏃‍♂️
             </Link>
           </div>
