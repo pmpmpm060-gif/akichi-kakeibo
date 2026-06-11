@@ -6,8 +6,16 @@ import { ArrowLeft, Plus, Trash2, Loader2, Edit2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 // ユーザーが選べるポップな絵文字パレットの候補
-const ICON_PALETTE = ["🍔", "🛍️", "🚗", "🏠", "✨", "☕", "🍿", "🎮", "🐱", "💪", "💴", "🎁"];
-
+// ユーザーが選べるポップな絵文字パレットの候補（インフラ・通信・たばこを追加！）
+const ICON_PALETTE = [
+  "🍔", "🛍️", "🚗", "🏠", "✨", "🍿", "🎮", "🐱", "💪", "💴", "🎁",
+  "💧", // 水道
+  "⚡", // 電気
+  "🔥", // ガス
+  "📱", // 携帯 (既存のものをこちらに整理)
+  "💻", // ネット
+  "🚬"  // たばこ
+];
 interface Category {
   id: string;
   name: string;
