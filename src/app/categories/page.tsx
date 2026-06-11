@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, Loader2, Edit2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { DataErrorCard } from '../../components/data-error-card';
 
 // ユーザーが選べるポップな絵文字パレットの候補
 // ユーザーが選べるポップな絵文字パレットの候補（インフラ・通信・たばこを追加！）
@@ -27,6 +28,8 @@ export default function CategoriesPage() {
   // 状態管理
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
   
   // 新規登録用の状態
   const [name, setName] = useState("");
@@ -48,7 +51,7 @@ export default function CategoriesPage() {
       if (ignore) return;
 
       if (error) {
-        alert('データの取得に失敗しました：' + error.message);
+        setDataError(error.message);
       } else if (data) {
         setCategories(data as Category[]);
       }
@@ -60,7 +63,13 @@ export default function CategoriesPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [retryKey]);
+
+  const retryFetch = () => {
+    setLoading(true);
+    setDataError(null);
+    setRetryKey((current) => current + 1);
+  };
 
   // --- 2. データの追加 (INSERT) ---
   const handleAddCategory = async (e: React.FormEvent) => {
@@ -209,6 +218,8 @@ export default function CategoriesPage() {
           <div className="flex justify-center py-8">
             <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
           </div>
+        ) : dataError ? (
+          <DataErrorCard message={dataError} onRetry={retryFetch} />
         ) : (
           <div className="flex flex-col gap-2.5">
             {categories.length === 0 ? (

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle, ChevronDown, ChevronUp, X, CheckCircle2, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
+import { DataErrorCard } from '../../components/data-error-card';
 
 interface Category {
   id: string;
@@ -51,6 +52,8 @@ function DashboardPageContent() {
   
   // フォーム用状態管理
   const [loading, setLoading] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [date, setDate] = useState(() => todayStr);
@@ -68,6 +71,7 @@ function DashboardPageContent() {
     const newDate = new Date(currentDate.getTime());
     newDate.setMonth(newDate.getMonth() + increment);
     setLoading(true);
+    setDataError(null);
     setCurrentDate(newDate);
   };
 
@@ -79,7 +83,7 @@ function DashboardPageContent() {
       const lastDay = new Date(jstYear, currentDate.getMonth() + 1, 0).getDate();
       const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
-      const [{ data: catData }, { data: budgetData }, { data: transData }] = await Promise.all([
+      const [categoryResult, budgetResult, transactionResult] = await Promise.all([
         supabase.from('categories').select('*'),
         supabase
           .from('budgets')
@@ -95,6 +99,17 @@ function DashboardPageContent() {
       ]);
 
       if (ignore) return;
+
+      const error = categoryResult.error || budgetResult.error || transactionResult.error;
+      if (error) {
+        setDataError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      const catData = categoryResult.data;
+      const budgetData = budgetResult.data;
+      const transData = transactionResult.data;
 
       if (catData) {
         setCategories(catData as Category[]);
@@ -115,7 +130,13 @@ function DashboardPageContent() {
     return () => {
       ignore = true;
     };
-  }, [currentDate, currentUser, jstYear, yearMonth]);
+  }, [currentDate, currentUser, jstYear, retryKey, yearMonth]);
+
+  const retryFetch = () => {
+    setLoading(true);
+    setDataError(null);
+    setRetryKey((current) => current + 1);
+  };
 
   // 実績の追加
   const handleAddTransaction = async (e: React.FormEvent) => {
@@ -249,6 +270,8 @@ function DashboardPageContent() {
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
         </div>
+      ) : dataError ? (
+        <DataErrorCard message={dataError} onRetry={retryFetch} />
       ) : (
         <>
           {/* 今月の全体集計カード */}

@@ -5,11 +5,14 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Wallet, FolderKanban, PiggyBank, Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { DataErrorCard } from '../components/data-error-card';
 
 export default function HomePage() {
   const [totalExpense, setTotalExpense] = useState<number>(0);
   const [totalBudget, setTotalBudget] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   // 日付・残日数に関する状態
   const [daysInMonth, setDaysInMonth] = useState<number>(30);
@@ -21,9 +24,9 @@ export default function HomePage() {
 
   // 💡 データの取得処理（currentUser が変わるたびに自動で再実行されます）
   useEffect(() => {
+    let ignore = false;
+
     const fetchCurrentMonthData = async () => {
-      setLoading(true);
-      
       const now = new Date();
       const jstYear = now.getFullYear();
       const jstMonth = String(now.getMonth() + 1).padStart(2, '0');
@@ -35,50 +38,62 @@ export default function HomePage() {
 
       // 📅 日数計算ロジック
       const todayNum = now.getDate();
-      setCurrentDay(todayNum);
-      setDaysInMonth(lastDay);
       // 残り日数（今日を含めるため +1）
       const remDays = lastDay - todayNum + 1;
+
+      const [expenseResult, budgetResult] = await Promise.all([
+        supabase
+          .from('transactions')
+          .select('amount')
+          .eq('type', 'expense')
+          .eq('user_id', currentUser)
+          .gte('date', startOfMonth)
+          .lte('date', safeEndOfMonth),
+        supabase
+          .from('budgets')
+          .select('amount')
+          .eq('user_id', currentUser),
+      ]);
+
+      if (ignore) return;
+
+      const error = expenseResult.error || budgetResult.error;
+      if (error) {
+        setDataError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      setCurrentDay(todayNum);
+      setDaysInMonth(lastDay);
       setRemainingDays(remDays > 0 ? remDays : 1);
-
-      // ① 選択中のユーザーの今月の支出だけを取得
-      const { data: expenseData, error: expenseError } = await supabase
-        .from('transactions')
-        .select('amount')
-        .eq('type', 'expense')
-        .eq('user_id', currentUser)
-        .gte('date', startOfMonth)
-        .lte('date', safeEndOfMonth);
-
-      if (!expenseError && expenseData) {
-        const total = expenseData.reduce((sum, item) => sum + Number(item.amount), 0);
-        setTotalExpense(total);
-      } else {
-        setTotalExpense(0);
-      }
-
-      // ② 選択中のユーザーの予算だけを取得
-      const { data: budgetData, error: budgetError } = await supabase
-        .from('budgets')
-        .select('amount')
-        .eq('user_id', currentUser);
-
-      if (!budgetError && budgetData) {
-        const bTotal = budgetData.reduce((sum, item) => sum + Number(item.amount), 0);
-        setTotalBudget(bTotal);
-      } else {
-        setTotalBudget(0);
-      }
-
+      setTotalExpense(
+        (expenseResult.data || []).reduce((sum, item) => sum + Number(item.amount), 0)
+      );
+      setTotalBudget(
+        (budgetResult.data || []).reduce((sum, item) => sum + Number(item.amount), 0)
+      );
       setLoading(false);
     };
 
-    fetchCurrentMonthData();
-  }, [currentUser]);
+    void fetchCurrentMonthData();
+
+    return () => {
+      ignore = true;
+    };
+  }, [currentUser, retryKey]);
 
   // 💡 ユーザーをトグルで切り替える関数
   const toggleUser = () => {
+    setLoading(true);
+    setDataError(null);
     setCurrentUser((prev) => (prev === 'user_a' ? 'user_b' : 'user_a'));
+  };
+
+  const retryFetch = () => {
+    setLoading(true);
+    setDataError(null);
+    setRetryKey((current) => current + 1);
   };
 
   const menus = [
@@ -142,8 +157,10 @@ export default function HomePage() {
         </button>
       </div>
 
+      {dataError && <DataErrorCard message={dataError} onRetry={retryFetch} />}
+
       {/* 今月のステータス */}
-      <div className="bg-amber-100 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2">
+      {!dataError && <div className="bg-amber-100 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2">
         <p className="text-xs font-bold text-slate-600">
           【{currentUser === 'user_a' ? 'ママ' : 'パパ'}】今月のつかったお金
         </p>
@@ -161,10 +178,10 @@ export default function HomePage() {
             </>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* 📊 予算・過不足メーターカード */}
-      {!loading && totalBudget > 0 && (
+      {!loading && !dataError && totalBudget > 0 && (
         <div className="flex flex-col gap-4">
           <div className={`border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-3 transition-all ${
             isOverBudget ? 'bg-rose-100' : 'bg-emerald-100/60'
@@ -254,7 +271,7 @@ export default function HomePage() {
       )}
 
       {/* 予算が1円も登録されていない場合のフォールバック */}
-      {!loading && totalBudget === 0 && (
+      {!loading && !dataError && totalBudget === 0 && (
         <div className="bg-slate-50 border-2 border-slate-400 border-dashed rounded-3xl p-4 text-center">
           <p className="text-xs font-bold text-slate-500">予算がまだ設定されていません 🐷</p>
           <p className="text-[10px] text-slate-400 mt-0.5">下のメニューから「予算をきめる」とここにメーターが出現します！</p>

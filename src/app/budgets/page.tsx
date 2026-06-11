@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
+import { DataErrorCard } from '../../components/data-error-card';
 
 interface Category {
   id: string;
@@ -29,12 +30,14 @@ function BudgetsPageContent() {
   const [budgets, setBudgets] = useState<{ [key: string]: number }>({});
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let ignore = false;
 
     const fetchData = async () => {
-      const [{ data: catData }, { data: budgetData }] = await Promise.all([
+      const [categoryResult, budgetResult] = await Promise.all([
         supabase.from('categories').select('*'),
         supabase
           .from('budgets')
@@ -43,6 +46,16 @@ function BudgetsPageContent() {
       ]);
 
       if (ignore) return;
+
+      const error = categoryResult.error || budgetResult.error;
+      if (error) {
+        setDataError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      const catData = categoryResult.data;
+      const budgetData = budgetResult.data;
 
       if (catData) setCategories(catData as Category[]);
 
@@ -59,7 +72,13 @@ function BudgetsPageContent() {
     return () => {
       ignore = true;
     };
-  }, [currentUser]);
+  }, [currentUser, retryKey]);
+
+  const retryFetch = () => {
+    setLoading(true);
+    setDataError(null);
+    setRetryKey((current) => current + 1);
+  };
 
   const handleAmountChange = (categoryId: string, value: string) => {
     const amount = value === "" ? 0 : parseInt(value, 10);
@@ -146,6 +165,8 @@ function BudgetsPageContent() {
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
           </div>
+        ) : dataError ? (
+          <DataErrorCard message={dataError} onRetry={retryFetch} />
         ) : categories.length === 0 ? (
           <div className="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-8 text-center">
             <p className="text-sm font-bold text-slate-400 mb-3">まずはカテゴリを追加してね！</p>
