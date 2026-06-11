@@ -115,7 +115,7 @@ export default function HomePage() {
             ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}
         >
           <User className="w-3.5 h-3.5" />
-          <span>{currentUser === 'user_a' ? '本番（私）' : 'テスト用'}</span>
+          <span>{currentUser === 'user_a' ? '👩‍🦰 ママ' : '👨 パパ'}</span>
           <RefreshCw className="w-3 h-3 text-slate-500 ml-0.5 animate-spin-slow" />
         </button>
       </div>
