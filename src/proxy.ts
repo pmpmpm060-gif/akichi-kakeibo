@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 
 export async function proxy(req: NextRequest) {
   // 最初に応答オブジェクトを作成（ここにクッキーを出し入れします）
@@ -19,27 +19,21 @@ export async function proxy(req: NextRequest) {
     SUPABASE_ANON_KEY,
     {
       cookies: {
-        get(name: string) {
-          return req.cookies.get(name)?.value;
+        getAll() {
+          return req.cookies.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
-          // 💡 ブラウザとサーバーの両方に確実にクッキーをセットする最新の書き方です
-          req.cookies.set({ name, value, ...options });
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => {
+            req.cookies.set(name, value);
+          });
           res = NextResponse.next({
             request: {
               headers: req.headers,
             },
           });
-          res.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          req.cookies.set({ name, value: '', ...options });
-          res = NextResponse.next({
-            request: {
-              headers: req.headers,
-            },
+          cookiesToSet.forEach(({ name, value, options }) => {
+            res.cookies.set(name, value, options);
           });
-          res.cookies.set({ name, value: '', ...options });
         },
       },
     }

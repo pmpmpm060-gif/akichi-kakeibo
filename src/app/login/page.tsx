@@ -1,19 +1,14 @@
 "use client";
 
 import { useState } from 'react';
-import { createBrowserClient } from '@supabase/ssr';
 import { Loader2, Lock, Mail, Sparkles } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-
-  // あなたのSupabaseのURLとキー
-  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!; // 👈 ご自身のURLに書き換えてください
-  const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // 👈 ご自身のAnon Keyに書き換えてください
-  const supabase = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
