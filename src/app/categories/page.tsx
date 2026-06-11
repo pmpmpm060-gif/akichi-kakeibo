@@ -36,24 +36,30 @@ export default function CategoriesPage() {
   // 💡 修正モード（モーダル）用の状態管理
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
-  // --- 1. データの読み込み (SELECT) ---
-  const fetchCategories = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('categories')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      alert('データの取得に失敗しました：' + error.message);
-    } else if (data) {
-      setCategories(data as Category[]);
-    }
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchCategories();
+    let ignore = false;
+
+    const fetchCategories = async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (ignore) return;
+
+      if (error) {
+        alert('データの取得に失敗しました：' + error.message);
+      } else if (data) {
+        setCategories(data as Category[]);
+      }
+      setLoading(false);
+    };
+
+    void fetchCategories();
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   // --- 2. データの追加 (INSERT) ---

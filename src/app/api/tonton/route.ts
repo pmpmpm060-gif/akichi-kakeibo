@@ -1,14 +1,36 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { GoogleGenAI } from '@google/genai';
+import { createServerClient } from '@supabase/ssr';
 
 export async function POST(request: Request) {
   try {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          },
+        },
+      }
+    );
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: '認証が必要です。' }, { status: 401 });
+    }
+
     const { totalBudget, totalExpense, remainingBudget, isOverBudget } = await request.json();
 
-    // 💡 サーバーサイド（本番環境）の環境変数から安全にキーを取得
-    // サーバー側なら「NEXT_PUBLIC_」が付いていない形式でも読み込めます
-// 💡 確実にどちらかのキーを掴むための書き方
-const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "APIキーがサーバーに設定されていませんぶー！" }, { status: 500 });
     }
@@ -38,8 +60,9 @@ const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_
 
     return NextResponse.json({ text: response.text || "お口がもつれたぶー！" });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Gemini API Error in Route:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : '予期しないエラーが発生しました。';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

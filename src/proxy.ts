@@ -2,14 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-
-  // 💡 トップ画面（/）とダッシュボード（/dashboard）以外は一瞬でスルー
-  if (pathname !== '/' && !pathname.startsWith('/dashboard')) {
-    return NextResponse.next();
-  }
-
+export async function proxy(req: NextRequest) {
   // 最初に応答オブジェクトを作成（ここにクッキーを出し入れします）
   let res = NextResponse.next({
     request: {
@@ -69,5 +62,7 @@ export const config = {
   matcher: [
     '/',
     '/dashboard/:path*',
+    '/budgets/:path*',
+    '/categories/:path*',
   ],
 };

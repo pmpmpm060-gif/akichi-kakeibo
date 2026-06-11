@@ -66,49 +66,55 @@ function DashboardPageContent() {
   const changeMonth = (increment: number) => {
     const newDate = new Date(currentDate.getTime());
     newDate.setMonth(newDate.getMonth() + increment);
+    setLoading(true);
     setCurrentDate(newDate);
   };
 
-  // データのまるごと取得
-  const fetchData = async () => {
-    setLoading(true);
-
-    const { data: catData } = await supabase.from('categories').select('*');
-    if (catData) {
-      setCategories(catData as Category[]);
-      if (catData.length > 0 && !categoryId) setCategoryId(catData[0].id);
-    }
-
-    const { data: budgetData } = await supabase
-      .from('budgets')
-      .select('category_id, amount')
-      .eq('user_id', currentUser);
-
-    const budgetMap: { [key: string]: number } = {};
-    if (budgetData) {
-      budgetData.forEach((b) => { budgetMap[b.category_id] = b.amount; });
-    }
-    setBudgets(budgetMap);
-
-    const startOfMonth = `${yearMonth}-01`;
-    const lastDay = new Date(jstYear, currentDate.getMonth() + 1, 0).getDate();
-    const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
-
-    const { data: transData } = await supabase
-      .from('transactions')
-      .select('*, categories(name, type, icon)')
-      .eq('user_id', currentUser)
-      .gte('date', startOfMonth)
-      .lte('date', safeEndOfMonth)
-      .order('date', { ascending: false });
-
-    if (transData) setTransactions(transData as unknown as Transaction[]);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchData();
-  }, [yearMonth, currentUser]);
+    let ignore = false;
+
+    const fetchData = async () => {
+      const startOfMonth = `${yearMonth}-01`;
+      const lastDay = new Date(jstYear, currentDate.getMonth() + 1, 0).getDate();
+      const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+
+      const [{ data: catData }, { data: budgetData }, { data: transData }] = await Promise.all([
+        supabase.from('categories').select('*'),
+        supabase
+          .from('budgets')
+          .select('category_id, amount')
+          .eq('user_id', currentUser),
+        supabase
+          .from('transactions')
+          .select('*, categories(name, type, icon)')
+          .eq('user_id', currentUser)
+          .gte('date', startOfMonth)
+          .lte('date', safeEndOfMonth)
+          .order('date', { ascending: false }),
+      ]);
+
+      if (ignore) return;
+
+      if (catData) {
+        setCategories(catData as Category[]);
+        setCategoryId((current) => current || catData[0]?.id || "");
+      }
+
+      const budgetMap: { [key: string]: number } = {};
+      budgetData?.forEach((budget) => {
+        budgetMap[budget.category_id] = budget.amount;
+      });
+      setBudgets(budgetMap);
+      setTransactions((transData || []) as unknown as Transaction[]);
+      setLoading(false);
+    };
+
+    void fetchData();
+
+    return () => {
+      ignore = true;
+    };
+  }, [currentDate, currentUser, jstYear, yearMonth]);
 
   // 実績の追加
   const handleAddTransaction = async (e: React.FormEvent) => {

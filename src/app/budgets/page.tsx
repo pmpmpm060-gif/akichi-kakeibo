@@ -29,28 +29,35 @@ function BudgetsPageContent() {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchData = async () => {
-    setLoading(true);
-    const { data: catData } = await supabase.from('categories').select('*');
-    const { data: budgetData } = await supabase
-      .from('budgets')
-      .select('category_id, amount')
-      .eq('user_id', currentUser);
-
-    if (catData) setCategories(catData as Category[]);
-    
-    const budgetMap: { [key: string]: number } = {};
-    if (budgetData) {
-      budgetData.forEach((b: Omit<Budget, 'user_id'>) => {
-        budgetMap[b.category_id] = b.amount;
-      });
-    }
-    setBudgets(budgetMap);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchData();
+    let ignore = false;
+
+    const fetchData = async () => {
+      const [{ data: catData }, { data: budgetData }] = await Promise.all([
+        supabase.from('categories').select('*'),
+        supabase
+          .from('budgets')
+          .select('category_id, amount')
+          .eq('user_id', currentUser),
+      ]);
+
+      if (ignore) return;
+
+      if (catData) setCategories(catData as Category[]);
+
+      const budgetMap: { [key: string]: number } = {};
+      budgetData?.forEach((budget: Omit<Budget, 'user_id'>) => {
+        budgetMap[budget.category_id] = budget.amount;
+      });
+      setBudgets(budgetMap);
+      setLoading(false);
+    };
+
+    void fetchData();
+
+    return () => {
+      ignore = true;
+    };
   }, [currentUser]);
 
   const handleAmountChange = (categoryId: string, value: string) => {
