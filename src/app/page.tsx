@@ -154,7 +154,7 @@ export default function HomePage() {
               </span>
             ) : (
               <span className="text-[10px] font-black text-emerald-700 bg-white border border-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-emerald-500" /> セーフ！
+                <CheckCircle2 className="w-3 h-3 text-emerald-500" /> セーフ！!
               </span>
             )}
           </div>
