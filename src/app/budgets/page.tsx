@@ -122,7 +122,7 @@ function BudgetsPageContent() {
         </div>
         <span className={`text-[10px] font-black border-2 border-slate-800 px-2.5 py-1 rounded-full shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]
           ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}>
-          {currentUser === 'user_a' ? '👨‍💻 本番（私）' : '🧪 テスト用'}
+          {currentUser === 'user_a' ? '👩‍🦰 ママ' : '👨 パパ'}
         </span>
       </div>
 
