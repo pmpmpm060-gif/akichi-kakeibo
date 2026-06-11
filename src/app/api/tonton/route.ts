@@ -6,6 +6,8 @@ import type { Database } from '../../../lib/database.types';
 
 export async function POST(request: Request) {
   try {
+    // Geminiを認証済みRoute Handler経由で呼び出し、
+    // APIキーとプロンプトをブラウザへ公開しない。
     const cookieStore = await cookies();
     const supabase = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

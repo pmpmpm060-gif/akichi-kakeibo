@@ -1,4 +1,4 @@
--- Calculate effective monthly budgets with optional positive or negative carryover.
+-- カテゴリごとの設定に応じて、余り・超過を含む当月実効予算を計算する。
 
 alter table public.categories
   add column if not exists carryover_enabled boolean not null default false,
@@ -10,6 +10,7 @@ language plpgsql
 set search_path = ''
 as $$
 begin
+  -- 繰越を有効にした月から計算を開始し、それ以前の実績は対象外とする。
   if new.carryover_enabled and not old.carryover_enabled then
     new.carryover_start_month = date_trunc('month', current_date)::date;
   elsif not new.carryover_enabled then
@@ -70,6 +71,8 @@ as $$
         when category_budget.carryover_enabled
           and category_budget.carryover_start_month < category_budget.target_month_start
         then (
+          -- 繰越額は、有効化以降の過去月基本予算の合計から、
+          -- 同じカテゴリ・画面表示ユーザーの過去実績合計を差し引いて算出する。
           category_budget.base_amount * (
             (
               extract(year from category_budget.target_month_start)

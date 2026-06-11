@@ -1,9 +1,12 @@
+-- Asia/Tokyoの月境界を使用し、繰越設定の状態整合性を保証する。
+
 create or replace function public.set_category_carryover_start_month()
 returns trigger
 language plpgsql
 set search_path = ''
 as $$
 begin
+  -- 繰越有効状態で作成されたカテゴリにも開始月を設定できるよう、INSERTにも対応する。
   if new.carryover_enabled
     and (tg_op = 'INSERT' or not old.carryover_enabled)
   then

@@ -2,9 +2,8 @@
 
 export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Wallet, FolderKanban, PiggyBank, Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2 } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser } from '../lib/household-users';
@@ -27,18 +26,19 @@ function HomePageContent() {
   const [hasBudget, setHasBudget] = useState(false);
   const [budgetSummary, setBudgetSummary] = useState<BudgetSummaryItem[]>([]);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [isSimulationOpen, setIsSimulationOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
 
-  // 日付・残日数に関する状態
+  // シミュレーションでは、ブラウザのJSTローカル日付を使用する。
   const [daysInMonth, setDaysInMonth] = useState<number>(30);
   const [remainingDays, setRemainingDays] = useState<number>(1);
   const [currentDay, setCurrentDay] = useState<number>(1);
 
-  // 💡 データの取得処理（currentUser が変わるたびに自動で再実行されます）
   useEffect(() => {
+    // ユーザー切替前の通信結果が後から返る場合があるため、古い結果は無視する。
     let ignore = false;
 
     const fetchCurrentMonthData = async () => {
@@ -51,9 +51,8 @@ function HomePageContent() {
       const lastDay = new Date(jstYear, now.getMonth() + 1, 0).getDate();
       const safeEndOfMonth = `${yearMonthStr}-${String(lastDay).padStart(2, '0')}`;
 
-      // 📅 日数計算ロジック
       const todayNum = now.getDate();
-      // 残り日数（今日を含めるため +1）
+      // 日当たり目安は今日から計算するため、残り日数に今日を含める。
       const remDays = lastDay - todayNum + 1;
 
       const [categoryResult, transactionResult, budgetResult] = await Promise.all([
@@ -88,6 +87,7 @@ function HomePageContent() {
           .reduce((sum, item) => sum + Number(item.amount), 0)
       );
       setTotalBudget(
+        // 収入予算は目標額であり、支出可能額ではないため合計から除外する。
         (budgetResult.data || [])
           .filter((item) => item.category_type === 'expense')
           .reduce((sum, item) => sum + Number(item.amount), 0)
@@ -105,6 +105,7 @@ function HomePageContent() {
         )
       );
       setBudgetSummary(
+        // トップ画面の予算案内は、支出カテゴリだけを対象にする。
         (categoryResult.data || [])
           .filter((category) => category.type === 'expense')
           .map((category) => {
@@ -137,7 +138,6 @@ function HomePageContent() {
     };
   }, [currentUser, retryKey]);
 
-  // 💡 ユーザーをトグルで切り替える関数
   const toggleUser = () => {
     setLoading(true);
     setDataError(null);
@@ -166,44 +166,18 @@ function HomePageContent() {
     window.location.href = '/login';
   };
 
-  const menus = [
-    {
-      title: "家計簿を付ける",
-      href: `/dashboard?user=${currentUser}`,
-      icon: Wallet,
-      bgColor: "bg-emerald-300",
-    },
-    {
-      title: "予算を決める",
-      href: `/budgets?user=${currentUser}`,
-      icon: PiggyBank,
-      bgColor: "bg-sky-300",
-    },
-    {
-      title: "カテゴリ管理",
-      href: `/categories?user=${currentUser}`,
-      icon: FolderKanban,
-      bgColor: "bg-pink-300",
-    },
-  ];
-
   const remainingBudget = totalBudget - totalExpense;
   const isOverBudget = remainingBudget < 0;
 
-  // 💡 日当たり予算とシミュレーションの計算
-  // 1日あたりあとどれくらい使えるか
+  // 実際の残予算を、月内で均等に支出した場合の理想値と比較する。
   const dailyRemaining = !isOverBudget ? Math.floor(remainingBudget / remainingDays) : 0;
-
-  // 日割り基準での「現時点の理想の残り予算」
   const idealRemaining = Math.floor(totalBudget * (remainingDays / daysInMonth));
-  
-  // シミュレーション評価 (実際の残り予算 vs 理想の残り予算)
   const isSimulationOk = remainingBudget >= idealRemaining;
   const simulationDiff = Math.abs(remainingBudget - idealRemaining);
 
   return (
-    <div className="p-6 flex flex-col gap-8">
-      {/* ヘッダー部分 */}
+    <div className="flex flex-col gap-6 px-4 py-5">
+      {/* ヘッダーとアカウント操作 */}
       <div className="flex items-center justify-between pt-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-amber-600 bg-amber-100 px-2.5 py-1 rounded-full flex items-center gap-1 w-max">
@@ -219,7 +193,7 @@ function HomePageContent() {
             onClick={handleSignOut}
             disabled={isSigningOut}
             aria-label="ログアウト"
-            className="w-10 h-10 flex items-center justify-center rounded-2xl border-2 border-slate-800 bg-white text-slate-700 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] disabled:opacity-60"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white text-slate-700 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] disabled:opacity-60"
           >
             {isSigningOut
               ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -227,7 +201,7 @@ function HomePageContent() {
           </button>
           <button
             onClick={toggleUser}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border-2 border-slate-800 font-black text-xs shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0px_0px_0px_0px_rgba(15,23,42,1)] transition-all
+            className={`flex min-h-11 items-center gap-1.5 px-3 py-2 rounded-2xl border-2 border-slate-800 font-black text-xs shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0px_0px_0px_0px_rgba(15,23,42,1)] transition-all
               ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}
           >
             <User className="w-3.5 h-3.5" />
@@ -237,34 +211,9 @@ function HomePageContent() {
         </div>
       </div>
 
-      {/* 各画面へのメニュー */}
-      <nav
-        aria-label="メインメニュー"
-        className="grid gap-3"
-        style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
-      >
-        {menus.map((menu) => {
-          const Icon = menu.icon;
-          return (
-            <Link
-              key={menu.href}
-              href={menu.href}
-              className={`min-w-0 flex flex-col items-center justify-center gap-2 p-3 rounded-2xl border-2 border-slate-800 ${menu.bgColor} shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_rgba(15,23,42,1)] transition-all`}
-            >
-              <div className="w-10 h-10 bg-white rounded-xl border-2 border-slate-800 flex items-center justify-center">
-                <Icon className="w-5 h-5 text-slate-800" strokeWidth={2.5} />
-              </div>
-              <span className="text-center text-[11px] leading-tight font-black text-slate-950">
-                {menu.title}
-              </span>
-            </Link>
-          );
-        })}
-      </nav>
-
       {dataError && <DataErrorCard message={dataError} onRetry={retryFetch} />}
 
-      {/* 今月のステータス */}
+      {/* 押下するとカテゴリ別の支出予算案内を展開する。 */}
       {!dataError && (
         <div className="flex flex-col gap-4">
           <button
@@ -291,6 +240,11 @@ function HomePageContent() {
                   </>
                 )}
               </div>
+              {!loading && hasBudget && (
+                <p className={`text-sm font-black ${isOverBudget ? 'text-rose-600' : 'text-emerald-700'}`}>
+                  {isOverBudget ? '予算超過' : 'あと使える'}: ¥{Math.abs(remainingBudget).toLocaleString()}
+                </p>
+              )}
             </div>
             {!loading && (
               <span className="shrink-0 bg-white border-2 border-slate-800 rounded-xl p-2">
@@ -354,7 +308,7 @@ function HomePageContent() {
         </div>
       )}
 
-      {/* 📊 予算・過不足メーターカード */}
+      {/* 支出予算の全体状況と消化ペース */}
       {!loading && !dataError && hasBudget && (
         <div className="flex flex-col gap-4">
           <div className={`border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-3 transition-all ${
@@ -397,7 +351,6 @@ function HomePageContent() {
               </div>
             </div>
 
-            {/* 💡 日当たりあといくら使えるかエリア */}
             {!isOverBudget && (
               <div className="bg-white/80 border-2 border-dashed border-slate-700 rounded-2xl p-2.5 flex items-center justify-between text-xs mt-1">
                 <span className="font-bold text-slate-600 flex items-center gap-1">
@@ -421,22 +374,29 @@ function HomePageContent() {
             </div>
           </div>
 
-          {/* 💡 シミュレーション（理想の残高判定）カード */}
-          <div className={`border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2 transition-all ${
+          {/* 月末まで均等に支出する場合とのペース比較 */}
+          <button
+            type="button"
+            onClick={() => setIsSimulationOpen((current) => !current)}
+            aria-expanded={isSimulationOpen}
+            className={`w-full border-2 border-slate-800 rounded-3xl p-4 text-left shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-2 transition-all ${
             isSimulationOk ? 'bg-indigo-50' : 'bg-orange-50'
           }`}>
             <div className="flex items-center justify-between text-xs font-black text-slate-700">
               <span className="flex items-center gap-1">
                 <TrendingUp className="w-4 h-4 text-indigo-600" /> 月末までのシミュレーション
               </span>
-              <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
-                isSimulationOk ? 'bg-indigo-200 border-indigo-400 text-indigo-800' : 'bg-orange-200 border-orange-400 text-orange-800'
-              }`}>
-                {isSimulationOk ? 'ペースばっちり！✨' : 'ちょっと使いすぎ！⚠️'}
+              <span className="flex items-center gap-1">
+                <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
+                  isSimulationOk ? 'bg-indigo-200 border-indigo-400 text-indigo-800' : 'bg-orange-200 border-orange-400 text-orange-800'
+                }`}>
+                  {isSimulationOk ? 'ペースばっちり！✨' : 'ちょっと使いすぎ！⚠️'}
+                </span>
+                {isSimulationOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </span>
             </div>
 
-            <div className="text-xs text-slate-600 flex flex-col gap-1 mt-1 bg-white p-3 rounded-2xl border border-slate-300">
+            {isSimulationOpen && <div className="text-xs text-slate-600 flex flex-col gap-1 mt-1 bg-white p-3 rounded-2xl border border-slate-300">
               <div className="flex justify-between">
                 <span>現在（{currentDay}日目）の理想の残高:</span>
                 <span className="font-bold text-slate-800">¥{idealRemaining.toLocaleString()}</span>
@@ -450,12 +410,12 @@ function HomePageContent() {
                   }
                 </span>
               </div>
-            </div>
-          </div>
+            </div>}
+          </button>
         </div>
       )}
 
-      {/* 予算が1円も登録されていない場合のフォールバック */}
+      {/* 支出予算が未設定の場合は、設定画面への案内を表示する。 */}
       {!loading && !dataError && !hasBudget && (
         <div className="bg-slate-50 border-2 border-slate-400 border-dashed rounded-3xl p-4 text-center">
           <p className="text-xs font-bold text-slate-500">予算がまだ設定されていません 🐷</p>

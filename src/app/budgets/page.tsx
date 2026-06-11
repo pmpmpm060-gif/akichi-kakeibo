@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react'; // 💡 Suspense をインポート
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Save, Loader2, Repeat2 } from 'lucide-react';
@@ -9,7 +9,8 @@ import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
 import type { Budget, Category } from '../../lib/database-helpers';
 
-// 💡 メインの処理を行うコンポーネント
+const isValidBudgetAmount = (amount: number) => Number.isSafeInteger(amount) && amount >= 0;
+
 function BudgetsPageContent() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
@@ -23,11 +24,15 @@ function BudgetsPageContent() {
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
+    // ユーザー切替前の通信結果が後から返る場合があるため、古い結果は無視する。
+    // これにより、別ユーザーの編集内容が誤表示されることを防ぐ。
     let ignore = false;
 
     const fetchData = async () => {
       const [categoryResult, budgetResult] = await Promise.all([
         supabase.from('categories').select('*').eq('user_id', currentUser),
+        // この画面では毎月共通の基本予算を編集する。
+        // 繰越反映後の予算は、表示時にget_effective_budgetsで計算する。
         supabase
           .from('budgets')
           .select('category_id, amount')
@@ -75,21 +80,29 @@ function BudgetsPageContent() {
   };
 
   const handleAmountChange = (categoryId: string, value: string) => {
-    const amount = value === "" ? 0 : parseInt(value, 10);
-    setBudgets({
-      ...budgets,
-      [categoryId]: isNaN(amount) ? 0 : amount,
-    });
+    const amount = value === "" ? 0 : Number(value);
+    setBudgets((current) => ({
+      ...current,
+      [categoryId]: Number.isNaN(amount) ? 0 : amount,
+    }));
   };
 
   const handleCarryoverChange = (categoryId: string, enabled: boolean) => {
-    setCarryoverSettings({
-      ...carryoverSettings,
+    setCarryoverSettings((current) => ({
+      ...current,
       [categoryId]: enabled,
-    });
+    }));
   };
 
   const handleSaveBudgets = async () => {
+    if (isSaving) return;
+
+    const invalidCategory = categories.find((category) => !isValidBudgetAmount(budgets[category.id] || 0));
+    if (invalidCategory) {
+      alert(`「${invalidCategory.name}」の予算額は、0以上の整数で入力してください。`);
+      return;
+    }
+
     setIsSaving(true);
     const budgetEntries = categories.map((cat) => ({
       category_id: cat.id,
@@ -97,64 +110,91 @@ function BudgetsPageContent() {
       carryover_enabled: carryoverSettings[cat.id] || false,
     }));
 
-    const { error } = await supabase.rpc('save_user_budgets', {
-      target_user_id: currentUser,
-      budget_entries: budgetEntries,
-    });
-    if (error) {
-      alert('予算の保存に失敗しました：' + error.message);
-    } else {
-      alert('基本予算と繰越設定を保存しました！ 🐷✨');
+    // 予算額と繰越設定を1回のRPC・DBトランザクションで保存し、
+    // 一部の行だけが更新される状態を防ぐ。
+    try {
+      const { error } = await supabase.rpc('save_user_budgets', {
+        target_user_id: currentUser,
+        budget_entries: budgetEntries,
+      });
+      if (error) {
+        alert('予算の保存に失敗しました：' + error.message);
+      } else {
+        alert('基本予算と繰越設定を保存しました！ 🐷✨');
+      }
+    } catch {
+      alert('予算の保存に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   const incomeCategories = categories.filter(c => c.type === 'income');
   const expenseCategories = categories.filter(c => c.type === 'expense');
 
   const renderCategoryRows = (targetCategories: Category[]) => {
-    return targetCategories.map((cat) => (
-      <div 
-        key={cat.id}
-        className="flex items-center justify-between p-4 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
-      >
-        <span className="font-black text-sm text-slate-800 flex items-center gap-2">
-          <span className="text-xl">{cat.icon || (cat.type === 'income' ? "💰" : "💸")}</span> {cat.name}
-        </span>
-        <div className="flex flex-col items-end gap-2 max-w-[155px]">
-          <div className="flex items-center gap-1.5">
-            <input
-              type="number"
-              inputMode="numeric"
-              value={budgets[cat.id] === undefined ? "" : budgets[cat.id]}
-              onChange={(e) => handleAmountChange(cat.id, e.target.value)}
-              placeholder="0"
-              className={`w-full px-3 py-2 rounded-xl border-2 border-slate-800 text-right font-black text-sm focus:outline-none ${cat.type === 'income' ? 'focus:bg-emerald-50' : 'focus:bg-sky-50'}`}
-            />
-            <span className="font-black text-xs text-slate-500 shrink-0">円</span>
+    return targetCategories.map((cat) => {
+      const amount = budgets[cat.id];
+      const hasInvalidAmount = amount !== undefined && !isValidBudgetAmount(amount);
+
+      return (
+        <div
+          key={cat.id}
+          className="flex flex-col gap-3 rounded-2xl border-2 border-slate-800 bg-white p-4 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
+        >
+          <span className="font-black text-sm text-slate-800 flex items-center gap-2">
+            <span className="text-xl">{cat.icon || (cat.type === 'income' ? "💰" : "💸")}</span> {cat.name}
+          </span>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                step="1"
+                value={amount === undefined ? "" : amount}
+                onChange={(e) => handleAmountChange(cat.id, e.target.value)}
+                disabled={isSaving}
+                aria-invalid={hasInvalidAmount}
+                placeholder="0"
+                className={`min-h-12 w-full rounded-xl border-2 px-3 py-2 text-right text-base font-black focus:outline-none disabled:opacity-60 ${
+                  hasInvalidAmount
+                    ? 'border-rose-500 bg-rose-50'
+                    : `border-slate-800 ${cat.type === 'income' ? 'focus:bg-emerald-50' : 'focus:bg-sky-50'}`
+                }`}
+              />
+              <span className="font-black text-xs text-slate-500 shrink-0">円</span>
+            </div>
+            {hasInvalidAmount && (
+              <p className="text-[10px] font-black text-rose-600">0以上の整数で入力してください</p>
+            )}
+            <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-600">
+              <span className="flex items-center gap-1.5">
+                <Repeat2 className="w-4 h-4" />
+                余り・超過を繰越
+              </span>
+              <input
+                type="checkbox"
+                checked={carryoverSettings[cat.id] || false}
+                onChange={(e) => handleCarryoverChange(cat.id, e.target.checked)}
+                disabled={isSaving}
+                className="peer sr-only"
+              />
+              <span className="relative h-7 w-12 rounded-full border-2 border-slate-800 bg-slate-300 transition-colors peer-checked:bg-sky-400 peer-disabled:opacity-60 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-slate-500 after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
+            </label>
           </div>
-          <label className="flex items-center gap-1.5 text-[10px] font-black text-slate-600 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={carryoverSettings[cat.id] || false}
-              onChange={(e) => handleCarryoverChange(cat.id, e.target.checked)}
-              className="accent-sky-500"
-            />
-            <Repeat2 className="w-3.5 h-3.5" />
-            余り・超過を繰越
-          </label>
         </div>
-      </div>
-    ));
+      );
+    });
   };
 
   return (
-    <div className="p-6 flex flex-col gap-6">
+    <div className="flex flex-col gap-6 px-4 py-5">
       <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-3">
           <Link 
             href={`/?user=${currentUser}`}
-            className="w-10 h-10 bg-white border-2 border-slate-800 rounded-2xl flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
           >
             <ArrowLeft className="w-5 h-5 text-slate-800" strokeWidth={2.5} />
           </Link>
@@ -217,7 +257,8 @@ function BudgetsPageContent() {
   );
 }
 
-// 💡 Next.jsがルーティングとして読み込む最外枠。ここで確実にSuspenseで包み込む
+// useSearchParamsは静的レンダリング中にSuspenseを必要とするため、
+// ルート境界でフォールバックを表示する。
 export default function BudgetsPage() {
   return (
     <Suspense fallback={

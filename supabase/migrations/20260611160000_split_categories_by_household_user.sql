@@ -1,4 +1,4 @@
--- Categories are owned separately by the two household display users.
+-- カテゴリを、世帯内の画面表示ユーザーごとに分けて管理する。
 
 alter table public.categories
   add column if not exists user_id text;
@@ -42,6 +42,8 @@ on public.categories
 for each row
 execute function public.prevent_category_user_change();
 
+-- 既存の主ユーザーのカテゴリを複製し、両ユーザーが同等の初期一覧を持ちつつ、
+-- 移行後はそれぞれ独立して編集できるようにする。
 insert into public.categories (household_id, user_id, name, type, icon)
 select household_id, 'user_b', name, type, icon
 from public.categories source
@@ -66,6 +68,7 @@ declare
   category_user_id text;
   category_type text;
 begin
+  -- カテゴリと取引で、選択中の画面表示ユーザーが一致することを保証する。
   select household_id, user_id, type
     into category_household_id, category_user_id, category_type
     from public.categories
@@ -101,6 +104,7 @@ declare
   category_household_id uuid;
   category_user_id text;
 begin
+  -- カテゴリと予算で、選択中の画面表示ユーザーが一致することを保証する。
   select household_id, user_id
     into category_household_id, category_user_id
     from public.categories

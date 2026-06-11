@@ -1,1 +1,32 @@
 @import "tailwindcss";
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  overscroll-behavior-y: none;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+button,
+a,
+input,
+select,
+label {
+  touch-action: manipulation;
+}
+
+.mobile-safe-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+.mobile-sheet {
+  max-height: min(90dvh, 52rem);
+  padding-bottom: env(safe-area-inset-bottom);
+}

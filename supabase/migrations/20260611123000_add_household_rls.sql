@@ -1,5 +1,5 @@
--- Multiple Supabase Auth accounts can belong to one shared household.
--- All existing Auth users and app data are assigned to the initial household.
+-- 複数のSupabase Authアカウントが、同じ世帯データを共有できるようにする。
+-- 既存のAuthユーザーとアプリデータは、初期世帯へまとめて移行する。
 
 create table if not exists public.households (
   id uuid primary key default gen_random_uuid(),
@@ -26,6 +26,8 @@ do $$
 declare
   initial_household_id uuid;
 begin
+  -- 世帯機能追加前の共有状態を維持するため、既存ユーザーとデータを
+  -- このマイグレーションで1つの初期世帯へ所属させる。
   select id
     into initial_household_id
     from public.households
@@ -63,6 +65,8 @@ stable
 security definer
 set search_path = ''
 as $$
+  -- Authユーザーはセッションを所有し、household_membersが
+  -- そのセッションから参照可能な共有データを決定する。
   select household_id
   from public.household_members
   where user_id = (select auth.uid())
@@ -134,6 +138,7 @@ do $$
 declare
   policy_record record;
 begin
+  -- 古い許可ポリシーが残らないよう、対象テーブルのポリシーを一式置き換える。
   for policy_record in
     select schemaname, tablename, policyname
     from pg_policies

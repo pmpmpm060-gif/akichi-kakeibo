@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react'; // 💡 Suspense を追加
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react';
@@ -12,30 +12,27 @@ import {
   type TransactionWithCategory,
 } from '../../lib/database-helpers';
 
-// 💡 メインのダッシュボード処理を行うコンポーネントに分離
 function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
 
-  // 安全な日付・月の状態管理（JSTベース）
+  // currentDateは表示対象の月を表す。取引入力日は別のdate状態で管理する。
   const [currentDate, setCurrentDate] = useState(() => new Date());
 
   const jstYear = currentDate.getFullYear();
   const jstMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
   const yearMonth = `${jstYear}-${jstMonth}`;
 
-  // 本日の日付（yyyy-mm-dd形式）
+  // UTC変換による日付ずれを避けるため、ローカル時刻から日付文字列を作る。
   const todayStr = (() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   })();
 
-  // データ用状態管理
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<TransactionWithCategory[]>([]);
   
-  // フォーム用状態管理
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -47,11 +44,9 @@ function DashboardPageContent() {
   const [isUpdatingTransaction, setIsUpdatingTransaction] = useState(false);
   const [deletingTransactionId, setDeletingTransactionId] = useState<string | null>(null);
 
-  // サブ画面（モーダル）用の状態管理
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithCategory | null>(null);
 
-  // 月の切り替え
   const changeMonth = (increment: number) => {
     const newDate = new Date(currentDate.getTime());
     newDate.setMonth(newDate.getMonth() + increment);
@@ -61,6 +56,8 @@ function DashboardPageContent() {
   };
 
   useEffect(() => {
+    // 月・ユーザー切替前の通信結果が後から返る場合があるため、古い結果は無視する。
+    // これにより、切替前の取引が現在の画面へ一時表示されることを防ぐ。
     let ignore = false;
 
     const fetchData = async () => {
@@ -117,7 +114,6 @@ function DashboardPageContent() {
     setRetryKey((current) => current + 1);
   };
 
-  // 実績の追加
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isAddingTransaction || !amount || !categoryId) return;
@@ -155,7 +151,6 @@ function DashboardPageContent() {
     setIsAddingTransaction(false);
   };
 
-  // 実績の修正
   const handleUpdateTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isUpdatingTransaction || !editingTransaction) return;
@@ -194,7 +189,6 @@ function DashboardPageContent() {
     setIsUpdatingTransaction(false);
   };
 
-  // 実績の削除
   const handleDeleteTransaction = async (id: string) => {
     if (deletingTransactionId) return;
     if (!confirm('この記録を削除しますか？')) return;
@@ -210,7 +204,7 @@ function DashboardPageContent() {
     setDeletingTransactionId(null);
   };
 
-  // 集計ロジック
+  // 合計値は、選択中の月と画面上のユーザーに属する取引だけを対象にする。
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
   const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
   const totalBalance = totalIncome - totalExpense;
@@ -229,11 +223,11 @@ function DashboardPageContent() {
   const calendarDays = getCalendarDays();
 
   return (
-    <div className="p-6 flex flex-col gap-6">
+    <div className="flex flex-col gap-6 px-4 py-5">
       {/* ヘッダー */}
       <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-3">
-          <Link href={`/?user=${currentUser}`} className="w-10 h-10 bg-white border-2 border-slate-800 rounded-2xl flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+          <Link href={`/?user=${currentUser}`} className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
             <ArrowLeft className="w-5 h-5 text-slate-800" strokeWidth={2.5} />
           </Link>
           <h1 className="text-2xl font-black tracking-tight">家計簿を付ける</h1>
@@ -245,16 +239,16 @@ function DashboardPageContent() {
         </span>
       </div>
 
-      {/* 月切り替えコントローラー */}
+      {/* 月選択と選択月の集計 */}
       <div className="bg-emerald-100 border-2 border-slate-800 rounded-3xl p-3 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <button onClick={() => changeMonth(-1)} className="w-10 h-10 bg-white border-2 border-slate-800 rounded-xl flex items-center justify-center active:bg-slate-100">
+          <button aria-label="前の月" onClick={() => changeMonth(-1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border-2 border-slate-800 bg-white active:bg-slate-100">
             <ChevronLeft className="w-6 h-6 text-slate-800" strokeWidth={2.5} />
           </button>
           <span className="font-black text-lg text-emerald-950">
             {jstYear}年{Number(jstMonth)}月
           </span>
-          <button onClick={() => changeMonth(1)} className="w-10 h-10 bg-white border-2 border-slate-800 rounded-xl flex items-center justify-center active:bg-slate-100">
+          <button aria-label="次の月" onClick={() => changeMonth(1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border-2 border-slate-800 bg-white active:bg-slate-100">
             <ChevronRight className="w-6 h-6 text-slate-800" strokeWidth={2.5} />
           </button>
         </div>
@@ -300,20 +294,20 @@ function DashboardPageContent() {
         <DataErrorCard message={dataError} onRetry={retryFetch} />
       ) : (
         <>
-          {/* 実績入力フォーム */}
-          <form onSubmit={handleAddTransaction} className="bg-emerald-50 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4">
+          {/* 取引入力フォーム */}
+          <form id="transaction-form" onSubmit={handleAddTransaction} className="scroll-mt-4 bg-emerald-50 border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4">
             <h2 className="font-black text-base text-emerald-950 flex items-center gap-1.5">
               <Plus className="w-5 h-5" strokeWidth={3} /> 今日の支出・収入
             </h2>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-black text-emerald-900 pl-1">いつ？</label>
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-3 py-2 rounded-xl border-2 border-slate-800 font-bold text-sm text-center" />
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-3 py-2 text-center text-base font-bold" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-black text-emerald-900 pl-1">分類</label>
-                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full px-3 py-2 rounded-xl border-2 border-slate-800 font-bold text-sm bg-white">
+                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="min-h-12 w-full rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-base font-bold">
                   {categories.map(c => (
                     <option key={c.id} value={c.id}>{c.icon || (c.type === 'expense' ? '💸' : '💰')} {c.name}</option>
                   ))}
@@ -323,12 +317,12 @@ function DashboardPageContent() {
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-black text-emerald-900 pl-1">いくら？</label>
-              <input type="number" inputMode="numeric" min="1" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="金額を入力" className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-800 font-black text-sm" />
+              <input type="number" inputMode="numeric" min="1" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="金額を入力" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-black" />
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-black text-emerald-900 pl-1">メモ（何に使った？）</label>
-              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="カフェ、お買い物など（任意）" className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-800 font-bold text-sm" />
+              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="カフェ、お買い物など（任意）" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-bold" />
             </div>
 
             <button type="submit" disabled={isAddingTransaction} className="w-full bg-slate-900 text-white font-black py-3 rounded-2xl border-2 border-slate-800 text-sm mt-1 disabled:opacity-60 flex items-center justify-center gap-2">
@@ -338,7 +332,7 @@ function DashboardPageContent() {
             </button>
           </form>
 
-          {/* カレンダー履歴セクション */}
+          {/* カレンダー形式の取引履歴 */}
           <div className="flex flex-col gap-3">
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">今月の記録カレンダー 📅</p>
             
@@ -371,9 +365,11 @@ function DashboardPageContent() {
                     <button
                       type="button"
                       key={`day-${day}`}
-                      onClick={() => { setSelectedDate(targetDateStr); }}
-                      className={`aspect-square border-2 rounded-xl flex flex-col justify-between p-1 hover:bg-amber-50 active:bg-amber-100 transition-all relative
+                      onClick={() => { setSelectedDate(targetDateStr); setEditingTransaction(null); }}
+                      aria-label={`${day}日、記録${dayTransactions.length}件`}
+                      className={`aspect-square min-h-11 border-2 rounded-xl flex flex-col items-center justify-center gap-1 p-1 active:bg-amber-100 transition-all relative
                         ${isToday ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-300 ring-offset-1' : 'border-slate-200'}
+                        ${selectedDate === targetDateStr ? 'bg-amber-200 border-slate-800' : ''}
                         ${!isToday && dayOfWeek === 0 ? 'bg-rose-50/30' : ''}
                         ${!isToday && dayOfWeek === 6 ? 'bg-sky-50/30' : ''}
                       `}
@@ -385,33 +381,60 @@ function DashboardPageContent() {
                         {day}
                       </span>
                       
-                      <div className="flex flex-col text-[8px] leading-tight w-full text-right font-bold overflow-hidden">
-                        {dayExpense > 0 && <span className="text-rose-500 text-right">-{dayExpense}</span>}
-                        {dayIncome > 0 && <span className="text-emerald-500 text-right">+{dayIncome}</span>}
+                      <div className="flex h-2 items-center justify-center gap-1">
+                        {dayExpense > 0 && <span className="h-2 w-2 rounded-full bg-rose-400" />}
+                        {dayIncome > 0 && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
                       </div>
                     </button>
                   );
                 })}
               </div>
             </div>
+            {selectedDate && (
+              <div className="flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-amber-50 p-3 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
+                <p className="px-1 text-sm font-black text-slate-800">
+                  {selectedDate.slice(5).replace('-', '月')}日 の記録
+                </p>
+                {transactions.filter((transaction) => transaction.date === selectedDate).length === 0 ? (
+                  <p className="py-4 text-center text-sm font-bold text-slate-400">この日の記録はありません</p>
+                ) : (
+                  transactions.filter((transaction) => transaction.date === selectedDate).map((transaction) => (
+                    <button
+                      key={transaction.id}
+                      type="button"
+                      onClick={() => setEditingTransaction(transaction)}
+                      className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border-2 border-slate-800 bg-white p-3 text-left"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-black text-slate-500">{transaction.categories?.name || '未分類'}</span>
+                        <span className="block truncate text-sm font-bold text-slate-800">{transaction.description || 'メモなし'}</span>
+                      </span>
+                      <span className={`shrink-0 text-sm font-black ${transaction.type === 'expense' ? 'text-rose-500' : 'text-emerald-600'}`}>
+                        {transaction.type === 'expense' ? '-' : '+'}¥{transaction.amount.toLocaleString()}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </>
       )}
 
-      {/* モーダルポップアップ */}
-      {selectedDate && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 z-50">
-          <div className="bg-white border-4 border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
+      {/* 選択日の取引編集モーダル */}
+      {selectedDate && editingTransaction && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="mobile-sheet w-full max-w-md overflow-hidden rounded-t-3xl border-4 border-slate-800 bg-white shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] animate-in fade-in slide-in-from-bottom-4 duration-200 sm:rounded-3xl">
             <div className="bg-amber-100 border-b-2 border-slate-800 p-4 flex justify-between items-center">
               <span className="font-black text-base text-slate-800">
                 {selectedDate.slice(5).replace('-', '月')}日 の記録
               </span>
-              <button type="button" onClick={() => { setSelectedDate(null); setEditingTransaction(null); }} className="w-8 h-8 bg-white border-2 border-slate-800 rounded-xl flex items-center justify-center">
+              <button type="button" onClick={() => setEditingTransaction(null)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border-2 border-slate-800 bg-white">
                 <X className="w-4 h-4 text-slate-800" strokeWidth={3} />
               </button>
             </div>
 
-            <div className="p-5 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
+            <div className="flex max-h-[calc(90dvh-76px)] flex-col gap-4 overflow-y-auto p-4">
               {editingTransaction ? (
                 <form onSubmit={handleUpdateTransaction} className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1">
@@ -419,7 +442,7 @@ function DashboardPageContent() {
                     <select 
                       value={editingTransaction.category_id} 
                       onChange={(e) => setEditingTransaction({...editingTransaction, category_id: e.target.value})} 
-                      className="w-full px-3 py-2 rounded-xl border-2 border-slate-800 font-bold text-sm bg-white"
+                      className="min-h-12 w-full rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-base font-bold"
                     >
                       {categories.map(c => (
                         <option key={c.id} value={c.id}>{c.icon || (c.type === 'expense' ? '💸' : '💰')} {c.name}</option>
@@ -434,7 +457,7 @@ function DashboardPageContent() {
                       step="1"
                       value={editingTransaction.amount} 
                       onChange={(e) => setEditingTransaction({...editingTransaction, amount: Number(e.target.value)})}
-                      className="w-full px-4 py-2 rounded-xl border-2 border-slate-800 font-black text-sm"
+                      className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2 text-base font-black"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -443,19 +466,30 @@ function DashboardPageContent() {
                       type="text" 
                       value={editingTransaction.description} 
                       onChange={(e) => setEditingTransaction({...editingTransaction, description: e.target.value})} 
-                      className="w-full px-4 py-2 rounded-xl border-2 border-slate-800 font-bold text-sm"
+                      className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2 text-base font-bold"
                     />
                   </div>
                   <div className="flex gap-2 mt-2">
-                    <button type="button" onClick={() => setEditingTransaction(null)} className="flex-1 bg-slate-100 border-2 border-slate-800 font-black py-2.5 rounded-xl text-xs">
+                    <button type="button" onClick={() => setEditingTransaction(null)} className="min-h-12 flex-1 rounded-xl border-2 border-slate-800 bg-slate-100 py-2.5 text-sm font-black">
                       戻る
                     </button>
-                    <button type="submit" disabled={isUpdatingTransaction} className="flex-1 bg-slate-900 text-white border-2 border-slate-800 font-black py-2.5 rounded-xl text-xs disabled:opacity-60 flex items-center justify-center gap-1.5">
+                    <button type="submit" disabled={isUpdatingTransaction} className="flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-slate-800 bg-slate-900 py-2.5 text-sm font-black text-white disabled:opacity-60">
                       {isUpdatingTransaction
                         ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 保存中...</>
                         : '変更を保存する！'}
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteTransaction(editingTransaction.id)}
+                    disabled={deletingTransactionId !== null || isUpdatingTransaction}
+                    className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-rose-300 bg-rose-50 text-sm font-black text-rose-600 disabled:opacity-50"
+                  >
+                    {deletingTransactionId === editingTransaction.id
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Trash2 className="h-4 w-4" />}
+                    この記録を削除する
+                  </button>
                 </form>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -499,7 +533,8 @@ function DashboardPageContent() {
   );
 }
 
-// 💡 Next.jsがルーティングとして読み込む最外枠。ここで確実にDashboardPageContentをSuspenseで包む
+// useSearchParamsは静的レンダリング中にSuspenseを必要とするため、
+// ルート境界でフォールバックを表示する。
 export default function DashboardPage() {
   return (
     <Suspense fallback={

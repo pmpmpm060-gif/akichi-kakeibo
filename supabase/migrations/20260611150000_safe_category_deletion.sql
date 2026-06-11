@@ -1,4 +1,4 @@
--- Prevent accidental loss of transaction history or budgets when deleting categories.
+-- カテゴリ削除時に、取引履歴や予算が意図せず失われることを防ぐ。
 
 alter table public.budgets
   drop constraint if exists budgets_category_id_fkey;
@@ -20,6 +20,8 @@ declare
   transaction_count integer;
   deleted_budget_count integer;
 begin
+  -- 履歴確認からカテゴリ削除までの間に取引が追加されないよう、
+  -- 最初に対象カテゴリをロックする。
   select household_id
     into target_household_id
     from public.categories
@@ -44,6 +46,7 @@ begin
   delete from public.budgets
     where category_id = target_category_id;
 
+  -- 関連予算を削除したか画面で説明できるよう、削除件数を返す。
   get diagnostics deleted_budget_count = row_count;
 
   delete from public.categories

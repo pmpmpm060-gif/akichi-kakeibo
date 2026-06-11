@@ -1,4 +1,4 @@
--- Save base budgets and carryover settings in one transaction.
+-- 基本予算と繰越設定を1つのトランザクションで保存する。
 
 create or replace function public.save_user_budgets(
   target_user_id text,
@@ -14,6 +14,8 @@ declare
   entry_count integer;
   matched_category_count integer;
 begin
+  -- 書き込み前に入力全体を検証する。途中で例外が発生した場合は、
+  -- 予算額とカテゴリの繰越設定を両方ロールバックする。
   if target_household_id is null then
     raise exception 'Authenticated user does not belong to a household.';
   end if;
@@ -55,6 +57,8 @@ begin
       and category.user_id = target_user_id;
 
   if entry_count <> matched_category_count then
+    -- アクセス可能なカテゴリだけを部分保存せず、
+    -- 別世帯・別画面表示ユーザーのカテゴリIDが含まれていれば全体を拒否する。
     raise exception 'Budget entries contain inaccessible categories.';
   end if;
 

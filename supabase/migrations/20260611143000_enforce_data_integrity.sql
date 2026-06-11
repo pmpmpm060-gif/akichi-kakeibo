@@ -1,4 +1,4 @@
--- Align database constraints with the assumptions made by the application UI.
+-- アプリ画面が前提としているデータ整合性を、DB制約でも保証する。
 
 update public.transactions
   set description = ''
@@ -55,6 +55,8 @@ declare
   category_household_id uuid;
   category_type text;
 begin
+  -- RLSは世帯へのアクセス権を検証し、このトリガーは特権処理や
+  -- 将来のサーバー処理から書き込む場合も行同士の整合性を保護する。
   select household_id, type
     into category_household_id, category_type
     from public.categories
@@ -93,6 +95,8 @@ security definer
 set search_path = ''
 as $$
 begin
+  -- 集計を簡単にするため取引にもカテゴリ種別を保持している。
+  -- カテゴリ種別の変更時は、非正規化した値も同期する。
   update public.transactions
     set type = new.type
     where category_id = new.id
@@ -122,6 +126,7 @@ as $$
 declare
   category_household_id uuid;
 begin
+  -- 予算が別世帯のカテゴリを参照することを禁止する。
   select household_id
     into category_household_id
     from public.categories
