@@ -36,6 +36,16 @@ export default function LoginPage() {
     }
   };
 
+  const handleSignUp = async () => {
+    if (!email || !password || loading) return;
+    setLoading(true); setErrorMsg('');
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) setErrorMsg(`登録エラー: ${error.message}`);
+    else if (data.session) window.location.href = '/setup';
+    else setErrorMsg('確認メールを送信しました。メール確認後にログインしてください。');
+    setLoading(false);
+  };
+
   return (
     <div className="flex min-h-screen flex-col justify-center gap-8 bg-amber-50/50 px-4 py-5">
       <div className="text-center">
@@ -94,6 +104,7 @@ export default function LoginPage() {
             'ログインする！ ✨'
           )}
         </button>
+        <button type="button" onClick={handleSignUp} disabled={loading} className="min-h-12 rounded-2xl border-2 border-slate-800 bg-emerald-100 text-sm font-black disabled:opacity-50">新しく利用登録する</button>
       </form>
     </div>
   );

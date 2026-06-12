@@ -158,6 +158,41 @@ export type Database = {
           },
         ]
       }
+      household_profiles: {
+        Row: {
+          created_at: string
+          display_name: string
+          household_id: string
+          icon: string
+          profile_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          household_id: string
+          icon?: string
+          profile_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          household_id?: string
+          icon?: string
+          profile_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_profiles_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       households: {
         Row: {
           created_at: string
@@ -642,6 +677,10 @@ export type Database = {
         Args: { target_household_id: string }
         Returns: boolean
       }
+      is_household_profile: {
+        Args: { target_household_id: string; target_profile_id: string }
+        Returns: boolean
+      }
       save_category_order: {
         Args: { category_ids: string[]; target_user_id: string }
         Returns: undefined
@@ -649,6 +688,10 @@ export type Database = {
       save_user_budgets: {
         Args: { budget_entries: Json; target_user_id: string }
         Returns: number
+      }
+      setup_personal_household: {
+        Args: { display_name: string; household_name: string }
+        Returns: string
       }
     }
     Enums: {

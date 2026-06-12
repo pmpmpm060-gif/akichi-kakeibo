@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { useProfileDisplay } from '../lib/household-profiles';
 
 type Toast = { id: number; message: string; tone: 'success' | 'error' };
 const ToastContext = createContext<(message: string, tone?: Toast['tone']) => void>(() => undefined);
@@ -47,6 +48,7 @@ export const useToast = () => useContext(ToastContext);
 export const useConfirm = () => useContext(ConfirmContext);
 
 export function AppHeader({ title, currentUser, subtitle }: { title: string; currentUser: string; subtitle?: string }) {
+  const profile = useProfileDisplay(currentUser);
   return (
     <header className="flex items-center justify-between gap-2 pt-2">
       <div className="flex min-w-0 items-center gap-3">
@@ -59,7 +61,7 @@ export function AppHeader({ title, currentUser, subtitle }: { title: string; cur
         </div>
       </div>
       <span className={`shrink-0 rounded-full border-2 border-slate-800 px-2.5 py-1 text-xs font-black ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}>
-        {currentUser === 'user_a' ? 'ママ' : 'パパ'}
+        {profile?.icon} {profile?.display_name || (currentUser === 'user_a' ? 'ママ' : 'パパ')}
       </span>
     </header>
   );

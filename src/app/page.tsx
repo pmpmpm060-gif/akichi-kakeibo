@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser } from '../lib/household-users';
 import type { Category } from '../lib/database-helpers';
+import { useHouseholdProfiles } from '../lib/household-profiles';
 
 type BudgetSummaryItem = Category & {
   actual: number;
@@ -21,6 +22,8 @@ function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const profiles = useHouseholdProfiles();
+  const currentProfile = profiles.find((profile) => profile.profile_id === currentUser);
 
   const [totalExpense, setTotalExpense] = useState<number>(0);
   const [totalBudget, setTotalBudget] = useState<number>(0);
@@ -170,9 +173,11 @@ function HomePageContent() {
   }, [currentUser, retryKey]);
 
   const toggleUser = () => {
+    if (profiles.length < 2) return;
     setLoading(true);
     setDataError(null);
-    const nextUser = currentUser === 'user_a' ? 'user_b' : 'user_a';
+    const currentIndex = profiles.findIndex((profile) => profile.profile_id === currentUser);
+    const nextUser = profiles[(currentIndex + 1) % profiles.length].profile_id;
     router.replace(`/?user=${nextUser}`);
   };
 
@@ -249,12 +254,13 @@ function HomePageContent() {
           </button>
           <button
             onClick={toggleUser}
+            disabled={profiles.length < 2}
             className={`flex min-h-11 items-center gap-1.5 px-3 py-2 rounded-2xl border-2 border-slate-800 font-black text-xs shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0px_0px_0px_0px_rgba(15,23,42,1)] transition-all
               ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}
           >
             <User className="w-3.5 h-3.5" />
-            <span>{currentUser === 'user_a' ? '👩‍🦰 ママ' : '👨 パパ'}</span>
-            <RefreshCw className="w-3 h-3 text-slate-500 ml-0.5" />
+            <span>{currentProfile?.icon} {currentProfile?.display_name || (currentUser === 'user_a' ? 'ママ' : 'パパ')}</span>
+            {profiles.length > 1 && <RefreshCw className="w-3 h-3 text-slate-500 ml-0.5" />}
           </button>
         </div>
       </div>
@@ -285,7 +291,7 @@ function HomePageContent() {
           >
             <div className="flex flex-col gap-2">
               <p className="text-xs font-bold text-slate-600">
-                【{currentUser === 'user_a' ? 'ママ' : 'パパ'}】今月使ったお金
+                【{currentProfile?.display_name || (currentUser === 'user_a' ? 'ママ' : 'パパ')}】今月使ったお金
               </p>
               <div className="flex items-baseline gap-2">
                 {loading ? (
@@ -485,7 +491,7 @@ function HomePageContent() {
       )}
 
       <p className="text-center text-xs font-bold text-slate-400 mt-4">
-        現在のモード: {currentUser === 'user_a' ? 'ママデータ' : 'パパデータ'} 🚀
+        現在のモード: {currentProfile?.display_name || (currentUser === 'user_a' ? 'ママ' : 'パパ')}データ 🚀
       </p>
     </div>
   );

@@ -52,6 +52,23 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  const { data: membership } = await supabase
+    .from('household_members')
+    .select('household_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (!membership && req.nextUrl.pathname !== '/setup') {
+    const url = req.nextUrl.clone();
+    url.pathname = '/setup';
+    return NextResponse.redirect(url);
+  }
+  if (membership && req.nextUrl.pathname === '/setup') {
+    const url = req.nextUrl.clone();
+    url.pathname = '/';
+    return NextResponse.redirect(url);
+  }
+
   return res;
 }
 
@@ -65,5 +82,8 @@ export const config = {
     '/recurring/:path*',
     '/reports/:path*',
     '/savings/:path*',
+    '/more/:path*',
+    '/tools/:path*',
+    '/setup/:path*',
   ],
 };
