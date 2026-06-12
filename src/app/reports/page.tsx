@@ -2,15 +2,18 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ArrowDownRight, ArrowUpRight, BarChart3, ChevronLeft, ChevronRight, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, BarChart3, Bookmark, ChevronLeft, ChevronRight, Loader2, Save, Tag, TrendingDown, TrendingUp } from 'lucide-react';
 import { DataErrorCard } from '../../components/data-error-card';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import type { Category, Transaction } from '../../lib/database-helpers';
+import type { Database } from '../../lib/database.types';
 import { useHorizontalSwipe } from '../../components/mobile-ui';
 import { AppHeader } from '../../components/mobile-ui';
 
-type ReportTransaction = Pick<Transaction, 'amount' | 'category_id' | 'date' | 'type'>;
+type ReportTransaction = Pick<Transaction, 'id' | 'amount' | 'category_id' | 'date' | 'type'>;
+type TagRow = Database['public']['Tables']['tags']['Row'];
+type SavedFilter = Database['public']['Tables']['saved_filters']['Row'];
 
 function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -27,6 +30,11 @@ function ReportsPageContent() {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [reportMode, setReportMode] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedTrendKey, setSelectedTrendKey] = useState<string | null>(null);
+  const [tags, setTags] = useState<TagRow[]>([]);
+  const [transactionTagMap, setTransactionTagMap] = useState<Record<string, string[]>>({});
+  const [monthlyReview, setMonthlyReview] = useState('');
+  const [savedReports, setSavedReports] = useState<SavedFilter[]>([]);
+  const [savingReview, setSavingReview] = useState(false);
 
   const currentMonth = monthKey(selectedDate);
   const previousDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1);
@@ -37,22 +45,33 @@ function ReportsPageContent() {
   useEffect(() => {
     let ignore = false;
     const fetchData = async () => {
-      const [transactionResult, categoryResult] = await Promise.all([
-        supabase.from('transactions').select('amount, category_id, date, type').eq('user_id', currentUser).gte('date', reportStart).lte('date', reportEnd),
+      const [transactionResult, categoryResult, tagResult, transactionTagResult, reviewResult, savedReportResult] = await Promise.all([
+        supabase.from('transactions').select('id, amount, category_id, date, type').eq('user_id', currentUser).gte('date', reportStart).lte('date', reportEnd),
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
+        supabase.from('tags').select('*').eq('user_id', currentUser).order('created_at'),
+        supabase.from('transaction_tags').select('transaction_id, tag_id'),
+        supabase.from('monthly_reviews').select('content').eq('user_id', currentUser).eq('month', `${currentMonth}-01`).maybeSingle(),
+        supabase.from('saved_filters').select('*').eq('user_id', currentUser).eq('filter_type', 'reports').order('created_at'),
       ]);
       if (ignore) return;
-      const error = transactionResult.error || categoryResult.error;
+      const error = transactionResult.error || categoryResult.error || tagResult.error || transactionTagResult.error || reviewResult.error || savedReportResult.error;
       if (error) setDataError(error.message);
       else {
         setTransactions(transactionResult.data || []);
         setCategories(categoryResult.data || []);
+        setTags(tagResult.data || []);
+        setTransactionTagMap((transactionTagResult.data || []).reduce<Record<string, string[]>>((map, item) => {
+          map[item.transaction_id] = [...(map[item.transaction_id] || []), item.tag_id];
+          return map;
+        }, {}));
+        setMonthlyReview(reviewResult.data?.content || '');
+        setSavedReports(savedReportResult.data || []);
       }
       setLoading(false);
     };
     void fetchData();
     return () => { ignore = true; };
-  }, [currentUser, reportEnd, reportStart, retryKey]);
+  }, [currentMonth, currentUser, reportEnd, reportStart, retryKey]);
 
   const monthTransactions = transactions.filter((transaction) => transaction.date.startsWith(currentMonth));
   const previousTransactions = transactions.filter((transaction) => transaction.date.startsWith(previousMonth));
@@ -90,6 +109,10 @@ function ReportsPageContent() {
     ...category,
     total: transactions.filter((transaction) => transaction.date.startsWith(String(selectedDate.getFullYear())) && transaction.category_id === category.id && transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0),
   })).filter((category) => category.total > 0).sort((left, right) => right.total - left.total);
+  const tagRanking = tags.map((tag) => ({
+    ...tag,
+    total: monthTransactions.filter((transaction) => transaction.type === 'expense' && (transactionTagMap[transaction.id] || []).includes(tag.id)).reduce((sum, transaction) => sum + transaction.amount, 0),
+  })).filter((tag) => tag.total > 0).sort((left, right) => right.total - left.total);
 
   const changeMonth = (increment: number) => {
     setLoading(true);
@@ -101,6 +124,24 @@ function ReportsPageContent() {
     () => changeMonth(reportMode === 'monthly' ? 1 : 12)
   );
   const selectedTrend = monthlyTrend.find((month) => month.key === selectedTrendKey);
+  const saveReview = async () => {
+    setSavingReview(true);
+    const { error } = await supabase.from('monthly_reviews').upsert({ user_id: currentUser, month: `${currentMonth}-01`, content: monthlyReview }, { onConflict: 'household_id,user_id,month' });
+    if (error) alert('振り返りの保存に失敗しました：' + error.message);
+    setSavingReview(false);
+  };
+  const saveReportCondition = async () => {
+    const name = window.prompt('保存するレポート条件の名前を入力してください');
+    if (!name?.trim()) return;
+    const { data, error } = await supabase.from('saved_filters').insert({ user_id: currentUser, name: name.trim(), filter_type: 'reports', conditions: { reportMode, currentMonth } }).select().single();
+    if (error) alert('レポート条件の保存に失敗しました：' + error.message);
+    else setSavedReports((current) => [...current, data]);
+  };
+  const applySavedReport = (filter: SavedFilter) => {
+    const conditions = filter.conditions as { reportMode?: 'monthly' | 'yearly'; currentMonth?: string };
+    if (conditions.reportMode) setReportMode(conditions.reportMode);
+    if (conditions.currentMonth) setSelectedDate(new Date(`${conditions.currentMonth}-01T00:00:00`));
+  };
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
@@ -114,6 +155,7 @@ function ReportsPageContent() {
         <span className="font-black">{reportMode === 'monthly' ? `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月` : `${selectedDate.getFullYear()}年`}</span>
         <button onClick={() => changeMonth(reportMode === 'monthly' ? 1 : 12)} className="flex min-h-11 min-w-11 items-center justify-center"><ChevronRight /></button>
       </div>
+      <div className="flex flex-wrap gap-2"><button onClick={saveReportCondition} className="flex min-h-11 items-center gap-1 rounded-xl border-2 border-slate-800 bg-indigo-100 px-3 text-xs font-black"><Bookmark className="h-4 w-4" />現在の表示を保存</button>{savedReports.map((filter) => <button key={filter.id} onClick={() => applySavedReport(filter)} className="min-h-11 rounded-xl border border-slate-400 px-3 text-xs font-black">{filter.name}</button>)}</div>
 
       {loading ? <Loader2 className="mx-auto h-8 w-8 animate-spin text-slate-400" /> : dataError ? (
         <DataErrorCard message={dataError} onRetry={() => { setLoading(true); setDataError(null); setRetryKey((current) => current + 1); }} />
@@ -151,6 +193,8 @@ function ReportsPageContent() {
           {selectedTrend && <p className="rounded-xl bg-indigo-50 p-3 text-center text-xs font-black">{selectedTrend.label}：収入 ¥{selectedTrend.income.toLocaleString()} ／ 支出 ¥{selectedTrend.expense.toLocaleString()}</p>}
           <p className="text-center text-[10px] font-bold text-slate-500"><span className="text-emerald-600">■ 収入</span>　<span className="text-rose-500">■ 支出</span></p>
         </section>
+        {tagRanking.length > 0 && <section className="flex flex-col gap-3"><h2 className="flex items-center gap-2 text-sm font-black"><Tag className="h-5 w-5" />タグ別支出</h2>{tagRanking.map((tag) => <article key={tag.id} className="flex justify-between rounded-2xl border-2 border-slate-800 bg-white p-3"><p className="text-sm font-black"># {tag.name}</p><p className="text-sm font-black text-rose-600">¥{tag.total.toLocaleString()}</p></article>)}</section>}
+        <section className="flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-amber-50 p-4"><h2 className="text-sm font-black">今月の振り返り</h2><textarea value={monthlyReview} onChange={(event) => setMonthlyReview(event.target.value)} rows={5} placeholder="今月よかったこと、来月気を付けたいことなど" className="rounded-xl border-2 border-slate-800 p-3 text-base" /><button onClick={saveReview} disabled={savingReview} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-amber-300 text-sm font-black disabled:opacity-50"><Save className="h-5 w-5" />{savingReview ? '保存中...' : '振り返りを保存'}</button></section>
 
         <section className="flex flex-col gap-3">
           <h2 className="text-sm font-black">カテゴリ別支出ランキング</h2>

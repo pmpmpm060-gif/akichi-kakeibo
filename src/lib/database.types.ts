@@ -176,6 +176,73 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_reviews: {
+        Row: {
+          content: string
+          household_id: string
+          id: string
+          month: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          household_id?: string
+          id?: string
+          month: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          household_id?: string
+          id?: string
+          month?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_reviews_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_preferences: {
+        Row: {
+          enabled: boolean
+          household_id: string
+          reminder_hour: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          enabled?: boolean
+          household_id?: string
+          reminder_hour?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          enabled?: boolean
+          household_id?: string
+          reminder_hour?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recurring_transactions: {
         Row: {
           amount: number
@@ -226,6 +293,44 @@ export type Database = {
           },
           {
             foreignKeyName: "recurring_transactions_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_filters: {
+        Row: {
+          conditions: Json
+          created_at: string
+          filter_type: string
+          household_id: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          conditions?: Json
+          created_at?: string
+          filter_type: string
+          household_id?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          conditions?: Json
+          created_at?: string
+          filter_type?: string
+          household_id?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_filters_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
             referencedRelation: "households"
@@ -319,6 +424,129 @@ export type Database = {
           },
         ]
       }
+      tags: {
+        Row: {
+          color: string
+          created_at: string
+          household_id: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          household_id?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          household_id?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tags_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transaction_tags: {
+        Row: {
+          household_id: string
+          tag_id: string
+          transaction_id: string
+        }
+        Insert: {
+          household_id?: string
+          tag_id: string
+          transaction_id: string
+        }
+        Update: {
+          household_id?: string
+          tag_id?: string
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transaction_tags_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transaction_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transaction_tags_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transaction_templates: {
+        Row: {
+          amount: number
+          category_id: string
+          created_at: string
+          description: string
+          household_id: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category_id: string
+          created_at?: string
+          description?: string
+          household_id?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string
+          created_at?: string
+          description?: string
+          household_id?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transaction_templates_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transaction_templates_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
@@ -328,6 +556,7 @@ export type Database = {
           description: string
           household_id: string
           id: string
+          receipt_path: string | null
           recurring_month: string | null
           recurring_transaction_id: string | null
           type: string
@@ -341,6 +570,7 @@ export type Database = {
           description?: string
           household_id?: string
           id?: string
+          receipt_path?: string | null
           recurring_month?: string | null
           recurring_transaction_id?: string | null
           type: string
@@ -354,6 +584,7 @@ export type Database = {
           description?: string
           household_id?: string
           id?: string
+          receipt_path?: string | null
           recurring_month?: string | null
           recurring_transaction_id?: string | null
           type?: string

@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { BarChart3, CalendarClock, FolderKanban, Loader2, PiggyBank } from 'lucide-react';
+import { BarChart3, CalendarClock, FolderKanban, Loader2, PiggyBank, Wrench } from 'lucide-react';
 import { AppHeader } from '../../components/mobile-ui';
 import { parseHouseholdUser } from '../../lib/household-users';
 
@@ -14,6 +14,7 @@ function MorePageContent() {
     { href: '/reports', label: '家計レポート', description: '月別・年間の傾向を確認', icon: BarChart3, color: 'bg-indigo-100' },
     { href: '/recurring', label: '定期取引', description: '固定費・定期収入を管理', icon: CalendarClock, color: 'bg-sky-100' },
     { href: '/savings', label: '貯金目標', description: '目標と積立状況を管理', icon: PiggyBank, color: 'bg-emerald-100' },
+    { href: '/tools', label: '便利機能設定', description: 'タグ・テンプレート・通知を管理', icon: Wrench, color: 'bg-amber-100' },
   ];
   return <div className="flex flex-col gap-6 px-4 py-5">
     <AppHeader title="その他の機能" currentUser={currentUser} />
