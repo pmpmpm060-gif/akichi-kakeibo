@@ -64,7 +64,12 @@ function RecurringPageContent() {
       setLoading(false);
     };
 
-    void fetchData();
+    void fetchData().catch(() => {
+      if (!ignore) {
+        setDataError('定期取引の取得に失敗しました。通信状況を確認して、もう一度お試しください。');
+        setLoading(false);
+      }
+    });
     return () => { ignore = true; };
   }, [currentUser, retryKey]);
 
@@ -128,38 +133,40 @@ function RecurringPageContent() {
   const handleToggle = async (item: RecurringWithCategory) => {
     if (mutatingId) return;
     setMutatingId(item.id);
-    const { error } = await supabase
-      .from('recurring_transactions')
-      .update({ enabled: !item.enabled })
-      .eq('id', item.id);
-    if (error) {
-      alert('状態の変更に失敗しました：' + error.message);
-    } else {
-      setItems((current) => current.map((target) =>
-        target.id === item.id ? { ...target, enabled: !target.enabled } : target
-      ));
-      if (!item.enabled) {
-        const { error: generateError } = await supabase.rpc('generate_recurring_transactions', {
-          target_user_id: currentUser,
-          target_month: `${currentMonthString()}-01`,
-        });
-        if (generateError) alert('有効化しましたが、当月分の生成に失敗しました：' + generateError.message);
+    try {
+      const { error } = await supabase.from('recurring_transactions').update({ enabled: !item.enabled }).eq('id', item.id);
+      if (error) alert('状態の変更に失敗しました：' + error.message);
+      else {
+        setItems((current) => current.map((target) => target.id === item.id ? { ...target, enabled: !target.enabled } : target));
+        if (!item.enabled) {
+          const { error: generateError } = await supabase.rpc('generate_recurring_transactions', {
+            target_user_id: currentUser, target_month: `${currentMonthString()}-01`,
+          });
+          if (generateError) alert('有効化しましたが、当月分の生成に失敗しました：' + generateError.message);
+        }
       }
+    } catch {
+      alert('状態の変更に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setMutatingId(null);
     }
-    setMutatingId(null);
   };
 
   const handleDelete = async (item: RecurringWithCategory) => {
     if (mutatingId || !await confirmAction(`「${item.description || item.categories?.name || '定期取引'}」を削除しますか？\n生成済みの家計簿記録は残ります。`)) return;
     setMutatingId(item.id);
-    const { error } = await supabase.from('recurring_transactions').delete().eq('id', item.id);
-    if (error) {
-      alert('削除に失敗しました：' + error.message);
-    } else {
-      setItems((current) => current.filter((target) => target.id !== item.id));
-      if (editingItem?.id === item.id) setEditingItem(null);
+    try {
+      const { error } = await supabase.from('recurring_transactions').delete().eq('id', item.id);
+      if (error) alert('削除に失敗しました：' + error.message);
+      else {
+        setItems((current) => current.filter((target) => target.id !== item.id));
+        if (editingItem?.id === item.id) setEditingItem(null);
+      }
+    } catch {
+      alert('削除に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setMutatingId(null);
     }
-    setMutatingId(null);
   };
 
   const handleUpdate = async (event: React.FormEvent) => {
@@ -174,20 +181,21 @@ function RecurringPageContent() {
       return;
     }
     setMutatingId(editingItem.id);
-    const { data, error } = await supabase.from('recurring_transactions').update({
-      category_id: editingItem.category_id,
-      amount: editingItem.amount,
-      description: editingItem.description.trim(),
-      day_of_month: editingItem.day_of_month,
-      start_month: editingItem.start_month,
-      end_month: editingItem.end_month,
-    }).eq('id', editingItem.id).select('*, categories(name, icon, type)').single();
-    if (error) alert('定期取引の更新に失敗しました：' + error.message);
-    else {
-      setItems((current) => current.map((item) => item.id === data.id ? data as RecurringWithCategory : item));
-      setEditingItem(null);
+    try {
+      const { data, error } = await supabase.from('recurring_transactions').update({
+        category_id: editingItem.category_id, amount: editingItem.amount, description: editingItem.description.trim(),
+        day_of_month: editingItem.day_of_month, start_month: editingItem.start_month, end_month: editingItem.end_month,
+      }).eq('id', editingItem.id).select('*, categories(name, icon, type)').single();
+      if (error) alert('定期取引の更新に失敗しました：' + error.message);
+      else {
+        setItems((current) => current.map((item) => item.id === data.id ? data as RecurringWithCategory : item));
+        setEditingItem(null);
+      }
+    } catch {
+      alert('定期取引の更新に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setMutatingId(null);
     }
-    setMutatingId(null);
   };
 
   return (

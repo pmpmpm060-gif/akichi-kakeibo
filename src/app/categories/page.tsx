@@ -60,7 +60,12 @@ function CategoriesPageContent() {
       setLoading(false);
     };
 
-    void fetchCategories();
+    void fetchCategories().catch(() => {
+      if (!ignore) {
+        setDataError('カテゴリの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
+        setLoading(false);
+      }
+    });
 
     return () => {
       ignore = true;

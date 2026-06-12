@@ -31,7 +31,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '認証が必要です。' }, { status: 401 });
     }
 
-    const { totalBudget, totalExpense, remainingBudget, isOverBudget } = await request.json();
+    const body: unknown = await request.json();
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: '入力内容が不正です。' }, { status: 400 });
+    }
+    const { totalBudget, totalExpense, remainingBudget, isOverBudget } = body as Record<string, unknown>;
+    const amounts = [totalBudget, totalExpense, remainingBudget];
+    if (
+      amounts.some((amount) => typeof amount !== 'number' || !Number.isSafeInteger(amount) || Math.abs(amount) > 1_000_000_000)
+      || typeof isOverBudget !== 'boolean'
+    ) {
+      // 外部入力をプロンプトへ直接混入させず、家計金額として妥当な値だけを許可する。
+      return NextResponse.json({ error: '入力内容が不正です。' }, { status: 400 });
+    }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -65,7 +77,7 @@ export async function POST(request: Request) {
 
   } catch (error: unknown) {
     console.error("Gemini API Error in Route:", error);
-    const message = error instanceof Error ? error.message : '予期しないエラーが発生しました。';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // 外部サービスや内部構成の詳細をレスポンスへ露出しない。
+    return NextResponse.json({ error: 'アドバイスの取得に失敗しました。しばらくしてからもう一度お試しください。' }, { status: 500 });
   }
 }

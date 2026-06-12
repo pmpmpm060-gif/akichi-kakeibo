@@ -51,7 +51,10 @@ function ToolsPageContent() {
       setReminderHour(String(notificationResult.data?.reminder_hour ?? 20));
       setLoading(false);
     };
-    void fetchData();
+    void fetchData().catch(() => {
+      alert('設定の取得に失敗しました。通信状況を確認して、もう一度お試しください。');
+      setLoading(false);
+    });
   }, [currentUser]);
 
   const addTag = async () => {

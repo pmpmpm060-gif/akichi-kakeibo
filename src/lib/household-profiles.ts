@@ -9,7 +9,17 @@ export type HouseholdProfile = Database['public']['Tables']['household_profiles'
 export function useHouseholdProfiles() {
   const [profiles, setProfiles] = useState<HouseholdProfile[]>([]);
   useEffect(() => {
-    void supabase.from('household_profiles').select('*').order('sort_order').then(({ data }) => setProfiles(data || []));
+    let ignore = false;
+    const fetchProfiles = async () => {
+      try {
+        const { data, error } = await supabase.from('household_profiles').select('*').order('sort_order');
+        if (!ignore && !error) setProfiles(data || []);
+      } catch {
+        // プロフィール表示失敗時も、各画面は既定ラベルで継続表示する。
+      }
+    };
+    void fetchProfiles();
+    return () => { ignore = true; };
   }, []);
   return profiles;
 }

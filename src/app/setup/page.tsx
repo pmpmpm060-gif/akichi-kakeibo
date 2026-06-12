@@ -14,9 +14,15 @@ export default function SetupPage() {
     event.preventDefault();
     if (!householdName.trim() || !displayName.trim() || saving) return;
     setSaving(true); setError('');
-    const result = await supabase.rpc('setup_personal_household', { household_name: householdName.trim(), display_name: displayName.trim() });
-    if (result.error) { setError(result.error.message); setSaving(false); }
-    else window.location.href = '/';
+    try {
+      const result = await supabase.rpc('setup_personal_household', { household_name: householdName.trim(), display_name: displayName.trim() });
+      if (result.error) setError(result.error.message);
+      else window.location.href = '/';
+    } catch {
+      setError('初期設定に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return <div className="flex min-h-screen flex-col justify-center gap-6 bg-amber-50 px-4 py-6">

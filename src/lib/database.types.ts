@@ -654,6 +654,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_transaction_with_tags: {
+        Args: {
+          target_amount: number
+          target_category_id: string
+          target_date: string
+          target_description: string
+          target_tag_ids: string[]
+          target_user_id: string
+        }
+        Returns: string
+      }
       current_household_id: { Args: never; Returns: string }
       delete_unused_category: {
         Args: { target_category_id: string }

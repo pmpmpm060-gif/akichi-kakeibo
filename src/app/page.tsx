@@ -165,7 +165,12 @@ function HomePageContent() {
       setLoading(false);
     };
 
-    void fetchCurrentMonthData();
+    void fetchCurrentMonthData().catch(() => {
+      if (!ignore) {
+        setDataError('データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
+        setLoading(false);
+      }
+    });
 
     return () => {
       ignore = true;

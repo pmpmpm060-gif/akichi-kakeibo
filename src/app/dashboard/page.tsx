@@ -144,7 +144,12 @@ function DashboardPageContent() {
       setLoading(false);
     };
 
-    void fetchData();
+    void fetchData().catch(() => {
+      if (!ignore) {
+        setDataError('データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
+        setLoading(false);
+      }
+    });
 
     return () => {
       ignore = true;
@@ -171,28 +176,30 @@ function DashboardPageContent() {
     }
 
     setIsAddingTransaction(true);
-    const { data, error } = await supabase
-      .from('transactions')
-      .insert([{
-        category_id: categoryId,
-        type: selectedCategory.type,
-        amount: parsedAmount,
-        date,
-        description,
-        user_id: currentUser
-      }])
-      .select('*, categories(name, type, icon)');
-
-    if (error) {
-      alert('登録に失敗しました：' + error.message);
-    } else if (data) {
-      let created = data[0];
-      if (selectedTagIds.length > 0) {
-        const { error: tagError } = await supabase.from('transaction_tags').insert(selectedTagIds.map((tagId) => ({ transaction_id: created.id, tag_id: tagId })));
-        if (!tagError) setTransactionTagMap((current) => ({ ...current, [created.id]: selectedTagIds }));
+    try {
+      // 取引とタグはRPC内の1トランザクションで保存し、片方だけ残る状態を防ぐ。
+      const { data: transactionId, error } = await supabase.rpc('create_transaction_with_tags', {
+        target_user_id: currentUser,
+        target_category_id: categoryId,
+        target_amount: parsedAmount,
+        target_date: date,
+        target_description: description,
+        target_tag_ids: selectedTagIds,
+      });
+      if (error) {
+        alert('登録に失敗しました：' + error.message);
+        return;
       }
+      const { data: createdData, error: fetchError } = await supabase.from('transactions').select('*, categories(name, type, icon)').eq('id', transactionId).single();
+      if (fetchError) {
+        alert('登録しましたが、画面への反映に失敗しました。再読み込みしてください。');
+        return;
+      }
+      let created = createdData;
+      setTransactionTagMap((current) => ({ ...current, [created.id]: selectedTagIds }));
       if (receiptFile) {
         const { data: householdId } = await supabase.rpc('current_household_id');
+        if (!householdId) throw new Error('所属世帯を確認できませんでした。');
         const extension = receiptFile.name.split('.').pop() || 'jpg';
         const path = `${householdId}/${created.id}.${extension}`;
         const upload = await supabase.storage.from('receipts').upload(path, receiptFile);
@@ -209,8 +216,11 @@ function DashboardPageContent() {
       setRecentCategoryIds((current) => [categoryId, ...current.filter((id) => id !== categoryId)].slice(0, 4));
       notify('家計簿に記録しました');
       router.refresh();
+    } catch {
+      alert('登録処理中に通信エラーが発生しました。画面を再読み込みして登録状況を確認してください。');
+    } finally {
+      setIsAddingTransaction(false);
     }
-    setIsAddingTransaction(false);
   };
 
   const handleUpdateTransaction = async (e: React.FormEvent) => {
@@ -227,28 +237,32 @@ function DashboardPageContent() {
     }
 
     setIsUpdatingTransaction(true);
-    const { error } = await supabase
-      .from('transactions')
-      .update({
-        amount: parsedAmount,
-        description: editingTransaction.description,
-        category_id: editingTransaction.category_id,
-        type: targetCategory.type,
-      })
-      .eq('id', editingTransaction.id);
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          amount: parsedAmount,
+          description: editingTransaction.description,
+          category_id: editingTransaction.category_id,
+          type: targetCategory.type,
+        })
+        .eq('id', editingTransaction.id);
 
-    if (error) {
-      alert('修正に失敗しました：' + error.message);
-    } else {
-      setTransactions((current) => current.map(t => t.id === editingTransaction.id ? {
-        ...editingTransaction,
-        type: targetCategory.type,
-        categories: { name: targetCategory.name, type: targetCategory.type, icon: targetCategory.icon }
-      } : t));
-      setEditingTransaction(null);
-      router.refresh();
+      if (error) alert('修正に失敗しました：' + error.message);
+      else {
+        setTransactions((current) => current.map(t => t.id === editingTransaction.id ? {
+          ...editingTransaction,
+          type: targetCategory.type,
+          categories: { name: targetCategory.name, type: targetCategory.type, icon: targetCategory.icon }
+        } : t));
+        setEditingTransaction(null);
+        router.refresh();
+      }
+    } catch {
+      alert('修正に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setIsUpdatingTransaction(false);
     }
-    setIsUpdatingTransaction(false);
   };
 
   const handleDeleteTransaction = async (id: string) => {
@@ -256,19 +270,24 @@ function DashboardPageContent() {
     if (!await confirmAction('この記録を削除しますか？')) return;
 
     setDeletingTransactionId(id);
-    const target = transactions.find((transaction) => transaction.id === id);
-    const { error } = await supabase.from('transactions').delete().eq('id', id);
-    if (error) alert('削除に失敗しました：' + error.message);
-    else {
-      if (target?.receipt_path) {
-        const { error: receiptError } = await supabase.storage.from('receipts').remove([target.receipt_path]);
-        if (receiptError) alert('取引は削除しましたが、レシート画像の削除に失敗しました：' + receiptError.message);
+    try {
+      const target = transactions.find((transaction) => transaction.id === id);
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (error) alert('削除に失敗しました：' + error.message);
+      else {
+        if (target?.receipt_path) {
+          const { error: receiptError } = await supabase.storage.from('receipts').remove([target.receipt_path]);
+          if (receiptError) alert('取引は削除しましたが、レシート画像の削除に失敗しました：' + receiptError.message);
+        }
+        setTransactions((current) => current.filter(t => t.id !== id));
+        setEditingTransaction(null);
+        router.refresh();
       }
-      setTransactions((current) => current.filter(t => t.id !== id));
-      setEditingTransaction(null);
-      router.refresh();
+    } catch {
+      alert('削除に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setDeletingTransactionId(null);
     }
-    setDeletingTransactionId(null);
   };
 
   // 合計値は、選択中の月と画面上のユーザーに属する取引だけを対象にする。
