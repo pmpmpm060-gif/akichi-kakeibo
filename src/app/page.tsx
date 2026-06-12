@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, BarChart3, CalendarClock, Bell, PiggyBank } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, BarChart3, CalendarClock, Bell, PiggyBank, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser } from '../lib/household-users';
@@ -15,6 +15,7 @@ type BudgetSummaryItem = Category & {
   budget: number;
   carryover: number;
 };
+type HouseholdAlert = { key: string; message: string };
 
 function HomePageContent() {
   const router = useRouter();
@@ -32,7 +33,8 @@ function HomePageContent() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
-  const [alerts, setAlerts] = useState<string[]>([]);
+  const [alerts, setAlerts] = useState<HouseholdAlert[]>([]);
+  const [dismissingAlertKey, setDismissingAlertKey] = useState<string | null>(null);
 
   // シミュレーションでは、ブラウザのJSTローカル日付を使用する。
   const [daysInMonth, setDaysInMonth] = useState<number>(30);
@@ -71,8 +73,8 @@ function HomePageContent() {
         return;
       }
 
-      const [categoryResult, transactionResult, budgetResult, previousTransactionResult] = await Promise.all([
-        supabase.from('categories').select('*').eq('user_id', currentUser),
+      const [categoryResult, transactionResult, budgetResult, previousTransactionResult, dismissedAlertResult] = await Promise.all([
+        supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
           .select('amount, category_id, type')
@@ -84,11 +86,12 @@ function HomePageContent() {
           target_month: startOfMonth,
         }),
         supabase.from('transactions').select('amount, category_id, type').eq('user_id', currentUser).gte('date', `${previousMonth}-01`).lte('date', previousEnd),
+        supabase.from('dismissed_alerts').select('alert_key').eq('user_id', currentUser),
       ]);
 
       if (ignore) return;
 
-      const error = categoryResult.error || transactionResult.error || budgetResult.error || previousTransactionResult.error;
+      const error = categoryResult.error || transactionResult.error || budgetResult.error || previousTransactionResult.error || dismissedAlertResult.error;
       if (error) {
         setDataError(error.message);
         setLoading(false);
@@ -145,16 +148,17 @@ function HomePageContent() {
           })
           .filter((item) => item.budget !== 0 || item.actual !== 0)
       );
-      const nextAlerts: string[] = [];
+      const dismissedAlertKeys = new Set((dismissedAlertResult.data || []).map((item) => item.alert_key));
+      const nextAlerts: HouseholdAlert[] = [];
       (categoryResult.data || []).filter((category) => category.type === 'expense').forEach((category) => {
         const currentActual = (transactionResult.data || []).filter((item) => item.category_id === category.id && item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
         const previousActual = (previousTransactionResult.data || []).filter((item) => item.category_id === category.id && item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
         const budget = Number((budgetResult.data || []).find((item) => item.category_id === category.id)?.amount || 0);
-        if (budget > 0 && currentActual >= budget) nextAlerts.push(`${category.name}が予算を超過しています`);
-        else if (budget > 0 && currentActual >= budget * 0.8) nextAlerts.push(`${category.name}が予算の80%に達しました`);
-        if (previousActual > 0 && currentActual >= previousActual * 1.5 && currentActual - previousActual >= 3000) nextAlerts.push(`${category.name}が前月より大きく増えています`);
+        if (budget > 0 && currentActual >= budget) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:budget-over`, message: `${category.name}が予算を超過しています` });
+        else if (budget > 0 && currentActual >= budget * 0.8) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:budget-80`, message: `${category.name}が予算の80%に達しました` });
+        if (previousActual > 0 && currentActual >= previousActual * 1.5 && currentActual - previousActual >= 3000) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:previous-increase`, message: `${category.name}が前月より大きく増えています` });
       });
-      setAlerts(nextAlerts);
+      setAlerts(nextAlerts.filter((alert) => !dismissedAlertKeys.has(alert.key)));
       setLoading(false);
     };
 
@@ -191,6 +195,23 @@ function HomePageContent() {
     }
 
     window.location.href = '/login';
+  };
+
+  const dismissAlert = async (targetAlert: HouseholdAlert) => {
+    if (dismissingAlertKey) return;
+    setDismissingAlertKey(targetAlert.key);
+    try {
+      const { error } = await supabase.from('dismissed_alerts').upsert({
+        user_id: currentUser,
+        alert_key: targetAlert.key,
+      }, { onConflict: 'household_id,user_id,alert_key' });
+      if (error) alert('アラートの削除に失敗しました：' + error.message);
+      else setAlerts((current) => current.filter((item) => item.key !== targetAlert.key));
+    } catch {
+      alert('アラートの削除に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setDismissingAlertKey(null);
+    }
   };
 
   const remainingBudget = totalBudget - totalExpense;
@@ -251,7 +272,7 @@ function HomePageContent() {
           <PiggyBank className="h-5 w-5 shrink-0" /><span>貯金目標</span>
         </Link>
       </div>
-      {!loading && alerts.length > 0 && <section className="flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-orange-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"><h2 className="flex items-center gap-2 text-sm font-black text-orange-800"><Bell className="h-5 w-5" />家計アラート</h2>{alerts.map((message) => <p key={message} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700">・{message}</p>)}</section>}
+      {!loading && alerts.length > 0 && <section className="flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-orange-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"><h2 className="flex items-center gap-2 text-sm font-black text-orange-800"><Bell className="h-5 w-5" />家計アラート</h2>{alerts.map((item) => <div key={item.key} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700"><span className="min-w-0 flex-1">・{item.message}</span><button type="button" onClick={() => dismissAlert(item)} disabled={dismissingAlertKey !== null} aria-label={`${item.message}を削除`} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 disabled:opacity-50">{dismissingAlertKey === item.key ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}</button></div>)}</section>}
 
       {/* 押下するとカテゴリ別の支出予算案内を展開する。 */}
       {!dataError && (

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Plus, Trash2, Loader2, Edit2, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Loader2, Edit2, X, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Save } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { DataErrorCard } from '../../components/data-error-card';
 import type { Category } from '../../lib/database-helpers';
@@ -28,6 +28,8 @@ function CategoriesPageContent() {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [hasOrderChanges, setHasOrderChanges] = useState(false);
   
   const [name, setName] = useState("");
   const [type, setType] = useState<"expense" | "income">("expense");
@@ -45,7 +47,8 @@ function CategoriesPageContent() {
         .from('categories')
         .select('*')
         .eq('user_id', currentUser)
-        .order('created_at', { ascending: false });
+        .order('sort_order')
+        .order('created_at');
 
       if (ignore) return;
 
@@ -79,14 +82,14 @@ function CategoriesPageContent() {
     try {
       const { data, error } = await supabase
         .from('categories')
-        .insert([{ name: trimmedName, type, icon: selectedIcon, user_id: currentUser }])
+        .insert([{ name: trimmedName, type, icon: selectedIcon, user_id: currentUser, sort_order: categories.length }])
         .select()
         .single();
 
       if (error) {
         alert('追加に失敗しました：' + error.message);
       } else {
-        setCategories((current) => [data, ...current]);
+        setCategories((current) => [...current, data]);
         setName("");
         setIsAddFormOpen(false);
       }
@@ -94,6 +97,37 @@ function CategoriesPageContent() {
       alert('追加に失敗しました。通信状況を確認して、もう一度お試しください。');
     } finally {
       setIsAddingCategory(false);
+    }
+  };
+
+  const moveCategory = (index: number, increment: number) => {
+    const targetIndex = index + increment;
+    if (targetIndex < 0 || targetIndex >= categories.length) return;
+    setCategories((current) => {
+      const next = [...current];
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
+    setHasOrderChanges(true);
+  };
+
+  const saveCategoryOrder = async () => {
+    if (isSavingOrder || !hasOrderChanges) return;
+    setIsSavingOrder(true);
+    try {
+      const { error } = await supabase.rpc('save_category_order', {
+        target_user_id: currentUser,
+        category_ids: categories.map((category) => category.id),
+      });
+      if (error) alert('並び順の保存に失敗しました：' + error.message);
+      else {
+        setHasOrderChanges(false);
+        notify('カテゴリの並び順を保存しました');
+      }
+    } catch {
+      alert('並び順の保存に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setIsSavingOrder(false);
     }
   };
 
@@ -256,7 +290,7 @@ function CategoriesPageContent() {
             {categories.length === 0 ? (
               <p className="text-center text-sm font-bold text-slate-400 py-6">まだ登録がありません 🐣</p>
             ) : (
-              categories.map((cat) => (
+              categories.map((cat, index) => (
                 <div 
                   key={cat.id}
                   className="flex items-center justify-between p-3.5 bg-white border-2 border-slate-800 rounded-2xl shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
@@ -273,7 +307,9 @@ function CategoriesPageContent() {
                     </div>
                   </div>
 
-                  <div className="flex items-center">
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => moveCategory(index, -1)} disabled={index === 0 || isSavingOrder} aria-label={`${cat.name}を上へ移動`} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-500 disabled:opacity-20"><ArrowUp className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => moveCategory(index, 1)} disabled={index === categories.length - 1 || isSavingOrder} aria-label={`${cat.name}を下へ移動`} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-500 disabled:opacity-20"><ArrowDown className="h-4 w-4" /></button>
                     <button
                       onClick={() => setEditingCategory(cat)}
                       disabled={deletingCategoryId !== null || isUpdatingCategory}
@@ -394,6 +430,11 @@ function CategoriesPageContent() {
           </div>
         </div>
       )}
+      {hasOrderChanges && <div className="mobile-safe-bottom fixed inset-x-0 bottom-[4.5rem] z-30 mx-auto max-w-md border-t-2 border-slate-800 bg-white/95 p-3 backdrop-blur">
+        <button type="button" onClick={saveCategoryOrder} disabled={isSavingOrder} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-800 bg-pink-300 text-sm font-black shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] disabled:opacity-60">
+          {isSavingOrder ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}並び順を保存
+        </button>
+      </div>}
     </div>
   );
 }

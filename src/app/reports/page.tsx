@@ -39,7 +39,7 @@ function ReportsPageContent() {
     const fetchData = async () => {
       const [transactionResult, categoryResult] = await Promise.all([
         supabase.from('transactions').select('amount, category_id, date, type').eq('user_id', currentUser).gte('date', reportStart).lte('date', reportEnd),
-        supabase.from('categories').select('*').eq('user_id', currentUser),
+        supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
       ]);
       if (ignore) return;
       const error = transactionResult.error || categoryResult.error;

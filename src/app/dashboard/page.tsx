@@ -86,7 +86,7 @@ function DashboardPageContent() {
       }
 
       const [categoryResult, transactionResult] = await Promise.all([
-        supabase.from('categories').select('*').eq('user_id', currentUser),
+        supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
           .select('*, categories(name, type, icon)')

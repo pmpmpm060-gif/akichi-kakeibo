@@ -62,6 +62,7 @@ export type Database = {
           icon: string | null
           id: string
           name: string
+          sort_order: number
           type: string
           user_id: string
         }
@@ -73,6 +74,7 @@ export type Database = {
           icon?: string | null
           id?: string
           name: string
+          sort_order?: number
           type: string
           user_id?: string
         }
@@ -84,12 +86,45 @@ export type Database = {
           icon?: string | null
           id?: string
           name?: string
+          sort_order?: number
           type?: string
           user_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "categories_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dismissed_alerts: {
+        Row: {
+          alert_key: string
+          dismissed_at: string
+          household_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          alert_key: string
+          dismissed_at?: string
+          household_id?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          alert_key?: string
+          dismissed_at?: string
+          household_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dismissed_alerts_household_id_fkey"
             columns: ["household_id"]
             isOneToOne: false
             referencedRelation: "households"
@@ -375,6 +410,10 @@ export type Database = {
       is_household_member: {
         Args: { target_household_id: string }
         Returns: boolean
+      }
+      save_category_order: {
+        Args: { category_ids: string[]; target_user_id: string }
+        Returns: undefined
       }
       save_user_budgets: {
         Args: { budget_entries: Json; target_user_id: string }

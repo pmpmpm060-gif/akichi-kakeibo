@@ -33,7 +33,7 @@ function BudgetsPageContent() {
 
     const fetchData = async () => {
       const [categoryResult, budgetResult] = await Promise.all([
-        supabase.from('categories').select('*').eq('user_id', currentUser),
+        supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         // この画面では毎月共通の基本予算を編集する。
         // 繰越反映後の予算は、表示時にget_effective_budgetsで計算する。
         supabase
