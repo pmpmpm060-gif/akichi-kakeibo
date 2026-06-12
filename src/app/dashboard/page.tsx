@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight, CalendarClock, Search, RotateCcw, Camera, Bookmark, Tag, Zap } from 'lucide-react';
+import { Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight, CalendarClock, Search, RotateCcw, Bookmark, Tag, Zap } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
@@ -13,6 +13,8 @@ import {
   type TransactionWithCategory,
 } from '../../lib/database-helpers';
 import type { Database } from '../../lib/database.types';
+import { userErrorMessage } from '../../lib/user-errors';
+import { AmountCalculator } from '../../components/amount-calculator';
 
 type TagRow = Database['public']['Tables']['tags']['Row'];
 type Template = Database['public']['Tables']['transaction_templates']['Row'];
@@ -62,7 +64,6 @@ function DashboardPageContent() {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [filterTagId, setFilterTagId] = useState('all');
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithCategory | null>(null);
@@ -107,7 +108,11 @@ function DashboardPageContent() {
           .lte('date', safeEndOfMonth)
           .order('date', { ascending: false }),
         supabase.from('tags').select('*').eq('user_id', currentUser).order('created_at'),
-        supabase.from('transaction_tags').select('transaction_id, tag_id'),
+        supabase.from('transaction_tags')
+          .select('transaction_id, tag_id, transactions!inner(user_id, date)')
+          .eq('transactions.user_id', currentUser)
+          .gte('transactions.date', startOfMonth)
+          .lte('transactions.date', safeEndOfMonth),
         supabase.from('transaction_templates').select('*').eq('user_id', currentUser).order('created_at'),
         supabase.from('saved_filters').select('*').eq('user_id', currentUser).eq('filter_type', 'transactions').order('created_at'),
       ]);
@@ -174,7 +179,6 @@ function DashboardPageContent() {
       alert('金額は1円以上の整数で入力してください。');
       return;
     }
-
     setIsAddingTransaction(true);
     try {
       // 取引とタグはRPC内の1トランザクションで保存し、片方だけ残る状態を防ぐ。
@@ -187,7 +191,7 @@ function DashboardPageContent() {
         target_tag_ids: selectedTagIds,
       });
       if (error) {
-        alert('登録に失敗しました：' + error.message);
+        alert(userErrorMessage('登録', error));
         return;
       }
       const { data: createdData, error: fetchError } = await supabase.from('transactions').select('*, categories(name, type, icon)').eq('id', transactionId).single();
@@ -195,23 +199,11 @@ function DashboardPageContent() {
         alert('登録しましたが、画面への反映に失敗しました。再読み込みしてください。');
         return;
       }
-      let created = createdData;
+      const created = createdData;
       setTransactionTagMap((current) => ({ ...current, [created.id]: selectedTagIds }));
-      if (receiptFile) {
-        const { data: householdId } = await supabase.rpc('current_household_id');
-        if (!householdId) throw new Error('所属世帯を確認できませんでした。');
-        const extension = receiptFile.name.split('.').pop() || 'jpg';
-        const path = `${householdId}/${created.id}.${extension}`;
-        const upload = await supabase.storage.from('receipts').upload(path, receiptFile);
-        if (!upload.error) {
-          const update = await supabase.from('transactions').update({ receipt_path: path }).eq('id', created.id).select('*, categories(name, type, icon)').single();
-          if (update.data) created = update.data;
-        } else alert('取引は登録しましたが、レシート画像の保存に失敗しました：' + upload.error.message);
-      }
       setTransactions((current) => [created, ...current]);
       setAmount("");
       setDescription("");
-      setReceiptFile(null);
       setSelectedTagIds([]);
       setRecentCategoryIds((current) => [categoryId, ...current.filter((id) => id !== categoryId)].slice(0, 4));
       notify('家計簿に記録しました');
@@ -248,7 +240,7 @@ function DashboardPageContent() {
         })
         .eq('id', editingTransaction.id);
 
-      if (error) alert('修正に失敗しました：' + error.message);
+      if (error) alert(userErrorMessage('修正', error));
       else {
         setTransactions((current) => current.map(t => t.id === editingTransaction.id ? {
           ...editingTransaction,
@@ -271,14 +263,9 @@ function DashboardPageContent() {
 
     setDeletingTransactionId(id);
     try {
-      const target = transactions.find((transaction) => transaction.id === id);
       const { error } = await supabase.from('transactions').delete().eq('id', id);
-      if (error) alert('削除に失敗しました：' + error.message);
+      if (error) alert(userErrorMessage('削除', error));
       else {
-        if (target?.receipt_path) {
-          const { error: receiptError } = await supabase.storage.from('receipts').remove([target.receipt_path]);
-          if (receiptError) alert('取引は削除しましたが、レシート画像の削除に失敗しました：' + receiptError.message);
-        }
         setTransactions((current) => current.filter(t => t.id !== id));
         setEditingTransaction(null);
         router.refresh();
@@ -315,12 +302,20 @@ function DashboardPageContent() {
   const saveCurrentFilter = async () => {
     const name = window.prompt('検索条件の名前を入力してください');
     if (!name?.trim()) return;
-    const { data, error } = await supabase.from('saved_filters').insert({
-      user_id: currentUser, name: name.trim(), filter_type: 'transactions',
-      conditions: { keyword, filterType, filterCategoryId, filterTagId },
-    }).select().single();
-    if (error) alert('検索条件の保存に失敗しました：' + error.message);
-    else { setSavedFilters((current) => [...current, data]); notify('検索条件を保存しました'); }
+    if (name.trim().length > 50) {
+      alert('検索条件の名前は50文字以内で入力してください。');
+      return;
+    }
+    try {
+      const { data, error } = await supabase.from('saved_filters').insert({
+        user_id: currentUser, name: name.trim(), filter_type: 'transactions',
+        conditions: { keyword, filterType, filterCategoryId, filterTagId },
+      }).select().single();
+      if (error) alert(userErrorMessage('検索条件の保存', error));
+      else { setSavedFilters((current) => [...current, data]); notify('検索条件を保存しました'); }
+    } catch {
+      alert('検索条件の保存に失敗しました。通信状況を確認してください。');
+    }
   };
 
   const applySavedFilter = (filter: SavedFilter) => {
@@ -329,12 +324,6 @@ function DashboardPageContent() {
     setFilterType(conditions.filterType || 'all');
     setFilterCategoryId(conditions.filterCategoryId || 'all');
     setFilterTagId(conditions.filterTagId || 'all');
-  };
-
-  const openReceipt = async (path: string) => {
-    const { data, error } = await supabase.storage.from('receipts').createSignedUrl(path, 60);
-    if (error) alert('レシート画像を開けませんでした：' + error.message);
-    else window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
   const getCalendarDays = () => {
@@ -439,17 +428,15 @@ function DashboardPageContent() {
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-black text-emerald-900 pl-1">いくら？</label>
-              <input type="number" inputMode="numeric" enterKeyHint="next" min="1" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); descriptionInputRef.current?.focus(); } }} placeholder="金額を入力" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-black" />
+              <div className="flex gap-2"><input type="number" inputMode="numeric" enterKeyHint="next" min="1" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); descriptionInputRef.current?.focus(); } }} placeholder="金額を入力" className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-black" /><AmountCalculator value={amount} min={1} onApply={(result) => setAmount(String(result))} disabled={isAddingTransaction} /></div>
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-black text-emerald-900 pl-1">メモ（何に使った？）</label>
-              <input ref={descriptionInputRef} type="text" enterKeyHint="done" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="カフェ、お買い物など（任意）" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-bold" />
+              <input ref={descriptionInputRef} type="text" enterKeyHint="done" value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} placeholder="カフェ、お買い物など（任意）" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-bold" />
             </div>
 
             {tags.length > 0 && <div className="flex flex-col gap-2"><label className="flex items-center gap-1 text-xs font-black text-emerald-900"><Tag className="h-4 w-4" />タグ（複数選択可）</label><div className="flex flex-wrap gap-2">{tags.map((tag) => <button key={tag.id} type="button" onClick={() => setSelectedTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} className={`min-h-11 rounded-xl border-2 px-3 text-xs font-black ${selectedTagIds.includes(tag.id) ? 'border-slate-800 bg-amber-200' : 'border-slate-300 bg-white'}`}># {tag.name}</button>)}</div></div>}
-
-            <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-500 bg-white text-sm font-black"><Camera className="h-5 w-5" />{receiptFile ? receiptFile.name : 'レシート画像を添付'}<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => setReceiptFile(event.target.files?.[0] || null)} className="sr-only" /></label>
 
             <button type="submit" disabled={isAddingTransaction} className="w-full bg-slate-900 text-white font-black py-3 rounded-2xl border-2 border-slate-800 text-sm mt-1 disabled:opacity-60 flex items-center justify-center gap-2">
               {isAddingTransaction
@@ -569,7 +556,7 @@ function DashboardPageContent() {
                         <span className="block truncate text-sm font-bold text-slate-800">{transaction.description || 'メモなし'}</span>
                         {(transactionTagMap[transaction.id] || []).length > 0 && <span className="block truncate text-xs font-bold text-amber-700">{(transactionTagMap[transaction.id] || []).map((id) => `#${tags.find((tag) => tag.id === id)?.name || ''}`).join(' ')}</span>}
                       </span>
-                      <span className="flex shrink-0 items-center gap-1">{transaction.receipt_path && <Camera className="h-4 w-4 text-sky-600" />}<span className={`text-sm font-black ${transaction.type === 'expense' ? 'text-rose-500' : 'text-emerald-600'}`}>
+                      <span className="flex shrink-0 items-center gap-1"><span className={`text-sm font-black ${transaction.type === 'expense' ? 'text-rose-500' : 'text-emerald-600'}`}>
                         {transaction.type === 'expense' ? '-' : '+'}¥{transaction.amount.toLocaleString()}
                       </span></span>
                     </button>
@@ -611,20 +598,21 @@ function DashboardPageContent() {
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-black text-slate-500">いくら？</label>
-                    <input 
+                    <div className="flex gap-2"><input
                       type="number" 
                       min="1"
                       step="1"
                       value={editingTransaction.amount} 
                       onChange={(e) => setEditingTransaction({...editingTransaction, amount: Number(e.target.value)})}
-                      className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2 text-base font-black"
-                    />
+                      className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-4 py-2 text-base font-black"
+                    /><AmountCalculator value={editingTransaction.amount} min={1} onApply={(result) => setEditingTransaction({ ...editingTransaction, amount: result })} disabled={isUpdatingTransaction} /></div>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-black text-slate-500">メモ</label>
                     <input 
                       type="text" 
-                      value={editingTransaction.description} 
+                      value={editingTransaction.description}
+                      maxLength={500}
                       onChange={(e) => setEditingTransaction({...editingTransaction, description: e.target.value})} 
                       className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2 text-base font-bold"
                     />
@@ -639,7 +627,6 @@ function DashboardPageContent() {
                         : '変更を保存する！'}
                     </button>
                   </div>
-                  {editingTransaction.receipt_path && <button type="button" onClick={() => openReceipt(editingTransaction.receipt_path!)} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-sky-300 bg-sky-50 text-sm font-black text-sky-700"><Camera className="h-5 w-5" />レシート画像を見る</button>}
                   <button
                     type="button"
                     onClick={() => handleDeleteTransaction(editingTransaction.id)}

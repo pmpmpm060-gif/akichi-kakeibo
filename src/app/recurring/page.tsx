@@ -8,6 +8,8 @@ import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import type { Category, RecurringTransaction } from '../../lib/database-helpers';
 import { AppHeader, useConfirm } from '../../components/mobile-ui';
+import { userErrorMessage } from '../../lib/user-errors';
+import { AmountCalculator } from '../../components/amount-calculator';
 
 type RecurringWithCategory = RecurringTransaction & {
   categories: Pick<Category, 'name' | 'icon' | 'type'> | null;
@@ -109,7 +111,7 @@ function RecurringPageContent() {
         .single();
 
       if (error) {
-        alert('定期取引の追加に失敗しました：' + error.message);
+        alert(userErrorMessage('定期取引の追加', error));
       } else {
         setItems((current) => [data as RecurringWithCategory, ...current]);
         setAmount('');
@@ -120,7 +122,7 @@ function RecurringPageContent() {
           target_month: `${currentMonthString()}-01`,
         });
         if (generateError) {
-          alert('定期取引は保存しましたが、当月分の生成に失敗しました：' + generateError.message);
+          alert('定期取引は保存しましたが、当月分を生成できませんでした。再読み込みしてください。');
         }
       }
     } catch {
@@ -135,14 +137,14 @@ function RecurringPageContent() {
     setMutatingId(item.id);
     try {
       const { error } = await supabase.from('recurring_transactions').update({ enabled: !item.enabled }).eq('id', item.id);
-      if (error) alert('状態の変更に失敗しました：' + error.message);
+      if (error) alert(userErrorMessage('状態の変更', error));
       else {
         setItems((current) => current.map((target) => target.id === item.id ? { ...target, enabled: !target.enabled } : target));
         if (!item.enabled) {
           const { error: generateError } = await supabase.rpc('generate_recurring_transactions', {
             target_user_id: currentUser, target_month: `${currentMonthString()}-01`,
           });
-          if (generateError) alert('有効化しましたが、当月分の生成に失敗しました：' + generateError.message);
+          if (generateError) alert('有効化しましたが、当月分を生成できませんでした。再読み込みしてください。');
         }
       }
     } catch {
@@ -157,7 +159,7 @@ function RecurringPageContent() {
     setMutatingId(item.id);
     try {
       const { error } = await supabase.from('recurring_transactions').delete().eq('id', item.id);
-      if (error) alert('削除に失敗しました：' + error.message);
+      if (error) alert(userErrorMessage('削除', error));
       else {
         setItems((current) => current.filter((target) => target.id !== item.id));
         if (editingItem?.id === item.id) setEditingItem(null);
@@ -186,7 +188,7 @@ function RecurringPageContent() {
         category_id: editingItem.category_id, amount: editingItem.amount, description: editingItem.description.trim(),
         day_of_month: editingItem.day_of_month, start_month: editingItem.start_month, end_month: editingItem.end_month,
       }).eq('id', editingItem.id).select('*, categories(name, icon, type)').single();
-      if (error) alert('定期取引の更新に失敗しました：' + error.message);
+      if (error) alert(userErrorMessage('定期取引の更新', error));
       else {
         setItems((current) => current.map((item) => item.id === data.id ? data as RecurringWithCategory : item));
         setEditingItem(null);
@@ -215,7 +217,7 @@ function RecurringPageContent() {
         </label>
         <label className="flex flex-col gap-1 text-xs font-black">
           金額
-          <input type="number" inputMode="numeric" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" placeholder="例: 80000" />
+          <div className="flex gap-2"><input type="number" inputMode="numeric" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-3 text-base" placeholder="例: 80000" /><AmountCalculator value={amount} min={1} onApply={(result) => setAmount(String(result))} disabled={isSaving} /></div>
         </label>
         <label className="flex flex-col gap-1 text-xs font-black">
           メモ
@@ -265,7 +267,7 @@ function RecurringPageContent() {
           <div className="flex items-center justify-between border-b-2 border-slate-800 bg-indigo-100 p-4"><h2 className="font-black">定期取引を編集</h2><button onClick={() => setEditingItem(null)} className="flex min-h-11 min-w-11 items-center justify-center"><X className="h-5 w-5" /></button></div>
           <form onSubmit={handleUpdate} className="flex max-h-[calc(90dvh-76px)] flex-col gap-3 overflow-y-auto p-4">
             <select value={editingItem.category_id} onChange={(event) => setEditingItem({ ...editingItem, category_id: event.target.value })} className="min-h-12 rounded-xl border-2 border-slate-800 bg-white px-3 text-base">{categories.map((category) => <option key={category.id} value={category.id}>{category.icon} {category.name}</option>)}</select>
-            <input type="number" min="1" step="1" value={editingItem.amount} onChange={(event) => setEditingItem({ ...editingItem, amount: Number(event.target.value) })} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
+            <div className="flex gap-2"><input type="number" min="1" step="1" value={editingItem.amount} onChange={(event) => setEditingItem({ ...editingItem, amount: Number(event.target.value) })} className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-3 text-base" /><AmountCalculator value={editingItem.amount} min={1} onApply={(result) => setEditingItem({ ...editingItem, amount: result })} disabled={mutatingId !== null} /></div>
             <input value={editingItem.description} onChange={(event) => setEditingItem({ ...editingItem, description: event.target.value })} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
             <input type="number" min="1" max="31" value={editingItem.day_of_month} onChange={(event) => setEditingItem({ ...editingItem, day_of_month: Number(event.target.value) })} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
             <label className="text-xs font-black">開始月<input type="month" value={editingItem.start_month.slice(0, 7)} onChange={(event) => setEditingItem({ ...editingItem, start_month: `${event.target.value}-01` })} className="mobile-date-input mt-1 min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>

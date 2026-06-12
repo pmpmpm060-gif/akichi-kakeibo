@@ -8,6 +8,7 @@ import { DataErrorCard } from '../../components/data-error-card';
 import type { Category } from '../../lib/database-helpers';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { AppHeader, useConfirm, useToast } from '../../components/mobile-ui';
+import { userErrorMessage } from '../../lib/user-errors';
 
 // カテゴリカードの見た目を揃えるため、選択可能なアイコンを限定する。
 const ICON_PALETTE = [
@@ -92,7 +93,7 @@ function CategoriesPageContent() {
         .single();
 
       if (error) {
-        alert('追加に失敗しました：' + error.message);
+        alert(userErrorMessage('追加', error));
       } else {
         setCategories((current) => [...current, data]);
         setName("");
@@ -124,7 +125,7 @@ function CategoriesPageContent() {
         target_user_id: currentUser,
         category_ids: categories.map((category) => category.id),
       });
-      if (error) alert('並び順の保存に失敗しました：' + error.message);
+      if (error) alert(userErrorMessage('並び順の保存', error));
       else {
         setHasOrderChanges(false);
         notify('カテゴリの並び順を保存しました');
@@ -157,7 +158,7 @@ function CategoriesPageContent() {
         .single();
 
       if (error) {
-        alert('修正に失敗しました：' + error.message);
+        alert(userErrorMessage('修正', error));
       } else {
         setCategories((current) => current.map((cat) => cat.id === data.id ? data : cat));
         setEditingCategory(null);
@@ -185,7 +186,7 @@ function CategoriesPageContent() {
           ? 'このカテゴリには家計簿の記録があるため削除できません。先に記録を別カテゴリへ変更してください。'
           : error.message.includes('recurring transactions')
             ? 'このカテゴリは定期取引で使用中のため削除できません。先に定期取引のカテゴリを変更するか、定期取引を削除してください。'
-            : '削除に失敗しました：' + error.message;
+            : userErrorMessage('削除', error);
         alert(message);
       } else {
         setCategories((current) => current.filter((cat) => cat.id !== category.id));
@@ -207,7 +208,7 @@ function CategoriesPageContent() {
       <AppHeader title="カテゴリ設定" currentUser={currentUser} />
 
       <button type="button" onClick={() => setIsAddFormOpen((current) => !current)} className="flex min-h-12 items-center justify-between rounded-2xl border-2 border-slate-800 bg-pink-100 px-4 text-sm font-black shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
-        <span className="flex items-center gap-2"><Plus className="h-5 w-5" />新しいカテゴリを追加</span>{isAddFormOpen ? <ChevronUp /> : <ChevronDown />}
+        <span className="flex items-center gap-2"><Plus className="h-5 w-5" />新しいカテゴリを追加（{categories.length}/100）</span>{isAddFormOpen ? <ChevronUp /> : <ChevronDown />}
       </button>
       {/* 新規登録カード */}
       {isAddFormOpen && <form
@@ -262,7 +263,8 @@ function CategoriesPageContent() {
           <label className="text-xs font-black text-pink-900 pl-1">カテゴリ名</label>
           <input
             type="text"
-            value={name}
+          value={name}
+          maxLength={50}
             onChange={(e) => setName(e.target.value)}
             placeholder="例: カフェ代、副業など"
             className="min-h-12 w-full rounded-2xl border-2 border-slate-800 px-4 py-3 text-base font-bold focus:outline-none"

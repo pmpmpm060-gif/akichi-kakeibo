@@ -10,12 +10,31 @@ import type { Category, Transaction } from '../../lib/database-helpers';
 import type { Database } from '../../lib/database.types';
 import { useHorizontalSwipe } from '../../components/mobile-ui';
 import { AppHeader } from '../../components/mobile-ui';
+import { userErrorMessage } from '../../lib/user-errors';
 
 type ReportTransaction = Pick<Transaction, 'id' | 'amount' | 'category_id' | 'date' | 'type'>;
 type TagRow = Database['public']['Tables']['tags']['Row'];
 type SavedFilter = Database['public']['Tables']['saved_filters']['Row'];
 type AiDiagnosis = Database['public']['Tables']['ai_household_diagnoses']['Row'];
 type RecommendedBudget = { categoryName: string; amount: number; reason: string };
+const PAGE_SIZE = 1000;
+
+async function fetchReportTransactions(currentUser: string, reportStart: string, reportEnd: string) {
+  const rows: ReportTransaction[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const result = await supabase.from('transactions')
+      .select('id, amount, category_id, date, type')
+      .eq('user_id', currentUser)
+      .gte('date', reportStart)
+      .lte('date', reportEnd)
+      .order('date')
+      .order('id')
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (result.error) return { data: rows, error: result.error };
+    rows.push(...(result.data || []));
+    if ((result.data?.length || 0) < PAGE_SIZE) return { data: rows, error: null };
+  }
+}
 
 function jsonStrings(value: AiDiagnosis['strengths']) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
@@ -64,13 +83,17 @@ function ReportsPageContent() {
     let ignore = false;
     const fetchData = async () => {
       const [transactionResult, categoryResult, tagResult, transactionTagResult, reviewResult, savedReportResult, diagnosisResult] = await Promise.all([
-        supabase.from('transactions').select('id, amount, category_id, date, type').eq('user_id', currentUser).gte('date', reportStart).lte('date', reportEnd),
+        fetchReportTransactions(currentUser, reportStart, reportEnd),
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase.from('tags').select('*').eq('user_id', currentUser).order('created_at'),
-        supabase.from('transaction_tags').select('transaction_id, tag_id'),
+        supabase.from('transaction_tags')
+          .select('transaction_id, tag_id, transactions!inner(user_id, date)')
+          .eq('transactions.user_id', currentUser)
+          .gte('transactions.date', reportStart)
+          .lte('transactions.date', reportEnd),
         supabase.from('monthly_reviews').select('content').eq('user_id', currentUser).eq('month', `${currentMonth}-01`).maybeSingle(),
         supabase.from('saved_filters').select('*').eq('user_id', currentUser).eq('filter_type', 'reports').order('created_at'),
-        supabase.from('ai_household_diagnoses').select('*').eq('user_id', currentUser).eq('target_month', `${currentMonth}-01`).order('created_at', { ascending: false }),
+        supabase.from('ai_household_diagnoses').select('*').eq('user_id', currentUser).eq('target_month', `${currentMonth}-01`).order('created_at', { ascending: false }).limit(10),
       ]);
       if (ignore) return;
       const error = transactionResult.error || categoryResult.error || tagResult.error || transactionTagResult.error || reviewResult.error || savedReportResult.error || diagnosisResult.error;
@@ -152,16 +175,33 @@ function ReportsPageContent() {
   const selectedTrend = monthlyTrend.find((month) => month.key === selectedTrendKey);
   const saveReview = async () => {
     setSavingReview(true);
-    const { error } = await supabase.from('monthly_reviews').upsert({ user_id: currentUser, month: `${currentMonth}-01`, content: monthlyReview }, { onConflict: 'household_id,user_id,month' });
-    if (error) alert('振り返りの保存に失敗しました：' + error.message);
-    setSavingReview(false);
+    try {
+      if (monthlyReview.length > 5000) {
+        alert('振り返りは5000文字以内で入力してください。');
+        return;
+      }
+      const { error } = await supabase.from('monthly_reviews').upsert({ user_id: currentUser, month: `${currentMonth}-01`, content: monthlyReview }, { onConflict: 'household_id,user_id,month' });
+      if (error) alert(userErrorMessage('振り返りの保存', error));
+    } catch {
+      alert('振り返りの保存に失敗しました。通信状況を確認してください。');
+    } finally {
+      setSavingReview(false);
+    }
   };
   const saveReportCondition = async () => {
     const name = window.prompt('保存するレポート条件の名前を入力してください');
     if (!name?.trim()) return;
-    const { data, error } = await supabase.from('saved_filters').insert({ user_id: currentUser, name: name.trim(), filter_type: 'reports', conditions: { reportMode, currentMonth } }).select().single();
-    if (error) alert('レポート条件の保存に失敗しました：' + error.message);
-    else setSavedReports((current) => [...current, data]);
+    if (name.trim().length > 50) {
+      alert('レポート条件の名前は50文字以内で入力してください。');
+      return;
+    }
+    try {
+      const { data, error } = await supabase.from('saved_filters').insert({ user_id: currentUser, name: name.trim(), filter_type: 'reports', conditions: { reportMode, currentMonth } }).select().single();
+      if (error) alert(userErrorMessage('レポート条件の保存', error));
+      else setSavedReports((current) => [...current, data]);
+    } catch {
+      alert('レポート条件の保存に失敗しました。通信状況を確認してください。');
+    }
   };
   const applySavedReport = (filter: SavedFilter) => {
     const conditions = filter.conditions as { reportMode?: 'monthly' | 'yearly'; currentMonth?: string };
@@ -177,13 +217,16 @@ function ReportsPageContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetUserId: currentUser, targetMonth: currentMonth }),
+        signal: AbortSignal.timeout(35_000),
       });
       const result = await response.json() as { diagnosis?: AiDiagnosis; error?: string };
       if (!response.ok || !result.diagnosis) throw new Error(result.error || 'AI診断に失敗しました。');
       setDiagnoses((current) => [result.diagnosis!, ...current]);
       setSelectedDiagnosisId(result.diagnosis.id);
     } catch (error: unknown) {
-      setDiagnosisError(error instanceof Error ? error.message : 'AI診断に失敗しました。');
+      setDiagnosisError(error instanceof DOMException && error.name === 'TimeoutError'
+        ? 'AI診断が時間内に完了しませんでした。しばらくしてからもう一度お試しください。'
+        : error instanceof Error ? error.message : 'AI診断に失敗しました。');
     } finally {
       setDiagnosing(false);
     }
@@ -226,7 +269,7 @@ function ReportsPageContent() {
         <section className="flex flex-col gap-4 rounded-3xl border-2 border-slate-800 bg-violet-50 p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
           <div>
             <h2 className="flex items-center gap-2 text-sm font-black"><Sparkles className="h-5 w-5 text-violet-600" />AI家計診断</h2>
-            <p className="mt-1 flex items-start gap-1 text-xs font-bold leading-relaxed text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />AIへ送るのは集計値だけです。取引メモやレシート画像は送信しません。</p>
+            <p className="mt-1 flex items-start gap-1 text-xs font-bold leading-relaxed text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />AIへ送るのは集計値だけです。取引メモやタグは送信せず、給料日前は未来日付の収入と定期収入予定も考慮します。</p>
           </div>
           <button type="button" onClick={runDiagnosis} disabled={diagnosing} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-violet-300 text-sm font-black disabled:opacity-50">
             {diagnosing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}{diagnosing ? '診断中...' : 'AI家計診断を実行'}

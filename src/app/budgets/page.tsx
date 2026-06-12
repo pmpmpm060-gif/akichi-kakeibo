@@ -9,6 +9,8 @@ import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
 import type { Budget, Category } from '../../lib/database-helpers';
 import { AppHeader, useToast } from '../../components/mobile-ui';
+import { userErrorMessage } from '../../lib/user-errors';
+import { AmountCalculator } from '../../components/amount-calculator';
 
 const isValidBudgetAmount = (amount: number) => Number.isSafeInteger(amount) && amount >= 0;
 
@@ -129,7 +131,7 @@ function BudgetsPageContent() {
         budget_entries: budgetEntries,
       });
       if (error) {
-        alert('予算の保存に失敗しました：' + error.message);
+        alert(userErrorMessage('予算の保存', error));
       } else {
         notify('基本予算と繰越設定を保存しました');
         setHasChanges(false);
@@ -164,7 +166,7 @@ function BudgetsPageContent() {
                 inputMode="numeric"
                 min="0"
                 step="1"
-                value={amount === undefined ? "" : amount}
+                value={!amount ? "" : amount}
                 onChange={(e) => handleAmountChange(cat.id, e.target.value)}
                 disabled={isSaving}
                 aria-invalid={hasInvalidAmount}
@@ -175,6 +177,7 @@ function BudgetsPageContent() {
                     : `border-slate-800 ${cat.type === 'income' ? 'focus:bg-emerald-50' : 'focus:bg-sky-50'}`
                 }`}
               />
+              <AmountCalculator value={amount ?? 0} onApply={(result) => handleAmountChange(cat.id, String(result))} disabled={isSaving} />
               <span className="font-black text-xs text-slate-500 shrink-0">円</span>
             </div>
             {hasInvalidAmount && (

@@ -13,7 +13,7 @@ export default function ApprovalPendingPage() {
     setLoading(true);
     setError('');
     try {
-      const request = await supabase.rpc('request_app_approval');
+      const request = await supabase.rpc('get_my_approval_status');
       if (request.error) throw request.error;
       setStatus(request.data);
       if (request.data === 'approved') window.location.href = '/setup';
@@ -26,7 +26,7 @@ export default function ApprovalPendingPage() {
 
   useEffect(() => {
     let ignore = false;
-    void supabase.rpc('request_app_approval').then((request) => {
+    void Promise.resolve(supabase.rpc('get_my_approval_status')).then((request) => {
       if (ignore) return;
       if (request.error) setError('承認状況を確認できませんでした。通信状況を確認してください。');
       else {
@@ -34,6 +34,11 @@ export default function ApprovalPendingPage() {
         if (request.data === 'approved') window.location.href = '/setup';
       }
       setLoading(false);
+    }).catch(() => {
+      if (!ignore) {
+        setError('承認状況を確認できませんでした。通信状況を確認してください。');
+        setLoading(false);
+      }
     });
     return () => { ignore = true; };
   }, []);

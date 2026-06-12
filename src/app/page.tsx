@@ -10,6 +10,7 @@ import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser } from '../lib/household-users';
 import type { Category } from '../lib/database-helpers';
 import { useHouseholdProfiles } from '../lib/household-profiles';
+import { userErrorMessage } from '../lib/user-errors';
 
 type BudgetSummaryItem = Category & {
   actual: number;
@@ -196,15 +197,18 @@ function HomePageContent() {
     if (isSigningOut) return;
 
     setIsSigningOut(true);
-    const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      setDataError(`ログアウトに失敗しました：${error.message}`);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        setDataError('ログアウトに失敗しました。通信状況を確認してください。');
+        return;
+      }
+      window.location.href = '/login';
+    } catch {
+      setDataError('ログアウトに失敗しました。通信状況を確認してください。');
+    } finally {
       setIsSigningOut(false);
-      return;
     }
-
-    window.location.href = '/login';
   };
 
   const dismissAlert = async (targetAlert: HouseholdAlert) => {
@@ -215,7 +219,7 @@ function HomePageContent() {
         user_id: currentUser,
         alert_key: targetAlert.key,
       }, { onConflict: 'household_id,user_id,alert_key' });
-      if (error) alert('アラートの削除に失敗しました：' + error.message);
+      if (error) alert(userErrorMessage('アラートの削除', error));
       else setAlerts((current) => current.filter((item) => item.key !== targetAlert.key));
     } catch {
       alert('アラートの削除に失敗しました。通信状況を確認して、もう一度お試しください。');

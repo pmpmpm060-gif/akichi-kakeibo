@@ -11,21 +11,13 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [noticeMsg, setNoticeMsg] = useState('');
 
-  const authErrorMessage = (message: string) => {
-    const normalized = message.toLowerCase();
-    if (normalized.includes('user already registered')) {
-      return 'このメールアドレスは登録済みです。入力したパスワードでログインしてください。';
-    }
-    return message;
-  };
-
   const validateSignUpInput = () => {
     if (!email.trim()) {
       setErrorMsg('メールアドレスを入力してください。');
       return false;
     }
-    if (password.length < 6) {
-      setErrorMsg('新規登録には6文字以上のパスワードを入力してください。');
+    if (password.length < 10) {
+      setErrorMsg('新規登録には10文字以上のパスワードを入力してください。');
       return false;
     }
     return true;
@@ -39,13 +31,12 @@ export default function LoginPage() {
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
 
       if (error) {
-        setErrorMsg(`エラー: ${error.message} 😭`);
-        setLoading(false);
+        setErrorMsg('メールアドレスまたはパスワードを確認してください。');
       } else {
         // フルナビゲーションにより、新しく保存された認証CookieをProxyで検証してから
         // 保護対象のトップ画面を表示する。
@@ -54,6 +45,7 @@ export default function LoginPage() {
     } catch (err) {
       console.error("Login failed unexpectedly:", err);
       setErrorMsg("通信エラーが発生しました 😭");
+    } finally {
       setLoading(false);
     }
   };
@@ -66,7 +58,7 @@ export default function LoginPage() {
     try {
       const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
       if (error) {
-        setErrorMsg(`登録エラー: ${authErrorMessage(error.message)}`);
+        setErrorMsg('利用登録を開始できませんでした。入力内容を確認し、時間を置いてもう一度お試しください。');
       } else {
         if (!data.session) {
           setErrorMsg('登録は完了しましたが、ログインを開始できませんでした。パパへ連絡してください。');
@@ -120,7 +112,7 @@ export default function LoginPage() {
             placeholder="example@mail.com" 
             className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-bold"
           />
-          <p className="pl-1 text-[11px] font-bold text-slate-400">新規登録時は6文字以上で入力してください。</p>
+          <p className="pl-1 text-[11px] font-bold text-slate-400">新規登録時は10文字以上で入力してください。</p>
         </div>
 
         <div className="flex flex-col gap-1">

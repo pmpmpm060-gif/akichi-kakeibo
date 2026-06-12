@@ -11,7 +11,13 @@ import { supabase } from '../../lib/supabase';
 function MorePageContent() {
   const currentUser = parseHouseholdUser(useSearchParams().get('user'));
   const [isAdmin, setIsAdmin] = useState(false);
-  useEffect(() => { void supabase.rpc('is_app_admin').then(({ data }) => setIsAdmin(Boolean(data))); }, []);
+  useEffect(() => {
+    let ignore = false;
+    void Promise.resolve(supabase.rpc('is_app_admin'))
+      .then(({ data }) => { if (!ignore) setIsAdmin(Boolean(data)); })
+      .catch(() => { if (!ignore) setIsAdmin(false); });
+    return () => { ignore = true; };
+  }, []);
   const items = [
     { href: '/categories', label: 'カテゴリ設定', description: '収入・支出の分類を管理', icon: FolderKanban, color: 'bg-pink-100' },
     { href: '/reports', label: '家計レポート', description: '月別・年間の傾向を確認', icon: BarChart3, color: 'bg-indigo-100' },

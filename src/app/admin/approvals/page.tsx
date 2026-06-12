@@ -18,30 +18,40 @@ export default function ApprovalsPage() {
   const [mutating, setMutating] = useState<string | null>(null);
 
   const fetchApprovals = async () => {
-    setLoading(true); setError('');
-    const admin = await supabase.rpc('is_app_admin');
-    if (admin.error || !admin.data) {
-      setError('この画面を利用する権限がありません。');
+    setLoading(true);
+    setError('');
+    try {
+      const admin = await supabase.rpc('is_app_admin');
+      if (admin.error || !admin.data) {
+        setError('この画面を利用する権限がありません。');
+        return;
+      }
+      const result = await supabase.from('user_approvals').select('*').eq('is_admin', false).order('requested_at', { ascending: false }).limit(200);
+      if (result.error) setError('利用申請の取得に失敗しました。');
+      else setApprovals(result.data || []);
+    } catch {
+      setError('利用申請の取得に失敗しました。通信状況を確認してください。');
+    } finally {
       setLoading(false);
-      return;
     }
-    const result = await supabase.from('user_approvals').select('*').eq('is_admin', false).order('requested_at', { ascending: false });
-    if (result.error) setError(result.error.message);
-    else setApprovals(result.data || []);
-    setLoading(false);
   };
 
   useEffect(() => {
     let ignore = false;
     void Promise.all([
       supabase.rpc('is_app_admin'),
-      supabase.from('user_approvals').select('*').eq('is_admin', false).order('requested_at', { ascending: false }),
+      supabase.from('user_approvals').select('*').eq('is_admin', false).order('requested_at', { ascending: false }).limit(200),
     ]).then(([admin, result]) => {
       if (ignore) return;
       if (admin.error || !admin.data) setError('この画面を利用する権限がありません。');
-      else if (result.error) setError(result.error.message);
+      else if (result.error) setError('利用申請の取得に失敗しました。');
       else setApprovals(result.data || []);
       setLoading(false);
+    }).catch(() => {
+      if (!ignore) {
+        setError('利用申請の取得に失敗しました。通信状況を確認してください。');
+        setLoading(false);
+      }
     });
     return () => { ignore = true; };
   }, []);
@@ -49,13 +59,18 @@ export default function ApprovalsPage() {
   const review = async (approval: Approval, approve: boolean) => {
     if (!await confirm(`${approval.email} の利用を${approve ? '承認' : '却下'}しますか？`)) return;
     setMutating(approval.user_id);
-    const result = await supabase.rpc('review_app_user', { target_user_id: approval.user_id, approve });
-    if (result.error) notify('承認状況の更新に失敗しました。', 'error');
-    else {
-      notify(approve ? '利用を承認しました。' : '利用を却下しました。');
-      await fetchApprovals();
+    try {
+      const result = await supabase.rpc('review_app_user', { target_user_id: approval.user_id, approve });
+      if (result.error) notify('承認状況の更新に失敗しました。', 'error');
+      else {
+        notify(approve ? '利用を承認しました。' : '利用を却下しました。');
+        await fetchApprovals();
+      }
+    } catch {
+      notify('承認状況の更新に失敗しました。通信状況を確認してください。', 'error');
+    } finally {
+      setMutating(null);
     }
-    setMutating(null);
   };
 
   return <div className="flex flex-col gap-6 px-4 py-5">

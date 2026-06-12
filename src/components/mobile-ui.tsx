@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { useProfileDisplay } from '../lib/household-profiles';
 
@@ -28,7 +28,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <div aria-live="polite" className="fixed inset-x-3 bottom-24 z-[70] mx-auto flex max-w-sm flex-col gap-2">
       {toasts.map((toast) => (
         <div key={toast.id} className={`flex items-center gap-2 rounded-2xl border-2 border-slate-800 px-4 py-3 text-sm font-black shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] ${toast.tone === 'error' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
-          <CheckCircle2 className="h-5 w-5 shrink-0" />{toast.message}
+          {toast.tone === 'error' ? <AlertTriangle className="h-5 w-5 shrink-0" /> : <CheckCircle2 className="h-5 w-5 shrink-0" />}{toast.message}
         </div>
       ))}
     </div>

@@ -8,13 +8,18 @@ interface DataErrorCardProps {
 }
 
 export function DataErrorCard({ message, onRetry }: DataErrorCardProps) {
+  // DB由来の英語エラー詳細はテーブル名などを含むため、画面には公開しない。
+  const displayMessage = /[ぁ-んァ-ヶ一-龠]/.test(message)
+    ? message
+    : '通信状況を確認して、もう一度お試しください。';
+
   return (
     <div className="bg-rose-50 border-2 border-rose-500 rounded-3xl p-4 flex flex-col gap-3 text-center">
       <div className="flex items-center justify-center gap-1.5 text-rose-700">
         <AlertTriangle className="w-5 h-5" />
         <p className="text-sm font-black">データを読み込めませんでした</p>
       </div>
-      <p className="text-xs font-bold text-rose-600 break-words">{message}</p>
+      <p className="text-xs font-bold text-rose-600 break-words">{displayMessage}</p>
       <button
         type="button"
         onClick={onRetry}

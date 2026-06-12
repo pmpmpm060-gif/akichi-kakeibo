@@ -64,6 +64,27 @@ export type Database = {
           },
         ]
       }
+      ai_request_limits: {
+        Row: {
+          request_count: number
+          request_kind: string
+          user_id: string
+          window_started_at: string
+        }
+        Insert: {
+          request_count?: number
+          request_kind: string
+          user_id: string
+          window_started_at?: string
+        }
+        Update: {
+          request_count?: number
+          request_kind?: string
+          user_id?: string
+          window_started_at?: string
+        }
+        Relationships: []
+      }
       budgets: {
         Row: {
           amount: number
@@ -641,7 +662,6 @@ export type Database = {
           description: string
           household_id: string
           id: string
-          receipt_path: string | null
           recurring_month: string | null
           recurring_transaction_id: string | null
           type: string
@@ -655,7 +675,6 @@ export type Database = {
           description?: string
           household_id?: string
           id?: string
-          receipt_path?: string | null
           recurring_month?: string | null
           recurring_transaction_id?: string | null
           type: string
@@ -669,7 +688,6 @@ export type Database = {
           description?: string
           household_id?: string
           id?: string
-          receipt_path?: string | null
           recurring_month?: string | null
           recurring_transaction_id?: string | null
           type?: string
@@ -734,6 +752,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_insert_ai_diagnosis: {
+        Args: { target_household_id: string; target_user_id: string }
+        Returns: boolean
+      }
+      consume_ai_diagnosis_quota: { Args: never; Returns: boolean }
       create_transaction_with_tags: {
         Args: {
           target_amount: number
@@ -764,6 +787,7 @@ export type Database = {
           category_type: string
         }[]
       }
+      get_my_approval_status: { Args: never; Returns: string }
       is_app_admin: { Args: never; Returns: boolean }
       is_approved_user: { Args: never; Returns: boolean }
       is_household_member: {

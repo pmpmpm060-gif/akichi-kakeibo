@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { userErrorMessage } from '../../lib/user-errors';
 
 export default function SetupPage() {
   const [householdName, setHouseholdName] = useState('わたしの家計簿');
@@ -16,7 +17,7 @@ export default function SetupPage() {
     setSaving(true); setError('');
     try {
       const result = await supabase.rpc('setup_personal_household', { household_name: householdName.trim(), display_name: displayName.trim() });
-      if (result.error) setError(result.error.message);
+      if (result.error) setError(userErrorMessage('初期設定', result.error));
       else window.location.href = '/';
     } catch {
       setError('初期設定に失敗しました。通信状況を確認して、もう一度お試しください。');
@@ -29,8 +30,8 @@ export default function SetupPage() {
     <div className="text-center"><Sparkles className="mx-auto h-8 w-8 text-amber-500" /><h1 className="mt-2 text-3xl font-black">最初の設定</h1><p className="mt-2 text-sm font-bold text-slate-500">あなた専用の家計簿を作ります。他の世帯からデータは見えません。</p></div>
     <form onSubmit={setup} className="flex flex-col gap-4 rounded-3xl border-4 border-slate-800 bg-white p-5 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)]">
       {error && <p className="rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-600">{error}</p>}
-      <label className="flex flex-col gap-1 text-xs font-black">家計簿の名前<input value={householdName} onChange={(e) => setHouseholdName(e.target.value)} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>
-      <label className="flex flex-col gap-1 text-xs font-black">表示名<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="例：さくら" className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>
+      <label className="flex flex-col gap-1 text-xs font-black">家計簿の名前<input value={householdName} maxLength={50} onChange={(e) => setHouseholdName(e.target.value)} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>
+      <label className="flex flex-col gap-1 text-xs font-black">表示名<input value={displayName} maxLength={30} onChange={(e) => setDisplayName(e.target.value)} placeholder="例：さくら" className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>
       <button disabled={saving} className="flex min-h-12 items-center justify-center rounded-xl border-2 border-slate-800 bg-emerald-300 text-sm font-black disabled:opacity-50">{saving ? <Loader2 className="h-5 w-5 animate-spin" /> : '専用家計簿を作成する'}</button>
     </form>
   </div>;

@@ -8,6 +8,8 @@ import { parseHouseholdUser } from '../../lib/household-users';
 import type { SavingsContribution, SavingsGoal } from '../../lib/database-helpers';
 import { DataErrorCard } from '../../components/data-error-card';
 import { AppHeader, useConfirm } from '../../components/mobile-ui';
+import { userErrorMessage } from '../../lib/user-errors';
+import { AmountCalculator } from '../../components/amount-calculator';
 
 type GoalWithTotal = SavingsGoal & { total: number };
 
@@ -67,7 +69,7 @@ function SavingsPageContent() {
       const { data, error } = await supabase.from('savings_goals').insert({
         user_id: currentUser, name: name.trim(), target_amount: amount, target_date: targetDate || null,
       }).select().single();
-      if (error) alert('目標の追加に失敗しました：' + error.message);
+      if (error) alert(userErrorMessage('目標の追加', error));
       else {
         setGoals((current) => [{ ...data, total: 0 }, ...current]);
         setName(''); setTargetAmount(''); setTargetDate('');
@@ -92,7 +94,7 @@ function SavingsPageContent() {
     setMutating(goal.id);
     try {
       const { error } = await supabase.from('savings_contributions').insert({ user_id: currentUser, goal_id: goal.id, amount });
-      if (error) alert('積立の登録に失敗しました：' + error.message);
+      if (error) alert(userErrorMessage('積立の登録', error));
       else {
         setGoals((current) => current.map((item) => item.id === goal.id ? { ...item, total: item.total + amount } : item));
         setContributionAmounts((current) => ({ ...current, [goal.id]: '' }));
@@ -109,7 +111,7 @@ function SavingsPageContent() {
     setMutating(goal.id);
     try {
       const { error } = await supabase.from('savings_goals').delete().eq('id', goal.id);
-      if (error) alert('削除に失敗しました：' + error.message);
+      if (error) alert(userErrorMessage('削除', error));
       else setGoals((current) => current.filter((item) => item.id !== goal.id));
     } catch {
       alert('削除に失敗しました。通信状況を確認して、もう一度お試しください。');
@@ -124,7 +126,7 @@ function SavingsPageContent() {
       <form onSubmit={addGoal} className="flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-emerald-50 p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
         <h2 className="flex items-center gap-2 font-black"><Plus className="h-5 w-5" />新しい目標</h2>
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="旅行、緊急資金など" className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
-        <input type="number" min="1" step="1" value={targetAmount} onChange={(event) => setTargetAmount(event.target.value)} placeholder="目標金額" className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
+        <div className="flex gap-2"><input type="number" min="1" step="1" value={targetAmount} onChange={(event) => setTargetAmount(event.target.value)} placeholder="目標金額" className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-3 text-base" /><AmountCalculator value={targetAmount} min={1} onApply={(result) => setTargetAmount(String(result))} disabled={mutating !== null} /></div>
         <label className="flex flex-col gap-1 text-xs font-black">目標日（任意）<input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} className="mobile-date-input min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>
         <button disabled={mutating !== null} className="min-h-12 rounded-xl border-2 border-slate-800 bg-slate-900 text-sm font-black text-white disabled:opacity-50">{mutating === 'new' ? '保存中...' : '目標を追加する'}</button>
       </form>
@@ -136,7 +138,7 @@ function SavingsPageContent() {
           <div className="flex justify-between gap-3"><div><h2 className="flex items-center gap-2 font-black"><PiggyBank className="h-5 w-5 text-emerald-600" />{goal.name}</h2><p className="text-xs font-bold text-slate-500">¥{goal.total.toLocaleString()} / ¥{goal.target_amount.toLocaleString()}</p></div><button onClick={() => deleteGoal(goal)} className="flex min-h-11 min-w-11 items-center justify-center text-rose-500"><Trash2 className="h-4 w-4" /></button></div>
           <div className="h-4 overflow-hidden rounded-full border-2 border-slate-800 bg-slate-100"><div className="h-full bg-emerald-400" style={{ width: `${percent}%` }} /></div>
           <p className="text-xs font-black text-slate-600">達成率 {Math.round(percent)}%{monthlyNeeded !== null && `・月々の目安 ¥${monthlyNeeded.toLocaleString()}`}</p>
-          <div className="flex gap-2"><input type="number" step="1" value={contributionAmounts[goal.id] || ''} onChange={(event) => setContributionAmounts((current) => ({ ...current, [goal.id]: event.target.value }))} placeholder="積立額（取り崩しはマイナス）" className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-3 text-base" /><button onClick={() => addContribution(goal)} disabled={mutating !== null} className="min-h-12 rounded-xl border-2 border-slate-800 bg-emerald-300 px-4 text-xs font-black disabled:opacity-50">反映</button></div>
+          <div className="flex gap-2"><input type="number" step="1" value={contributionAmounts[goal.id] || ''} onChange={(event) => setContributionAmounts((current) => ({ ...current, [goal.id]: event.target.value }))} placeholder="積立額（取り崩しはマイナス）" className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-3 text-base" /><AmountCalculator value={contributionAmounts[goal.id] || ''} allowNegative min={-1_000_000_000} onApply={(result) => setContributionAmounts((current) => ({ ...current, [goal.id]: String(result) }))} disabled={mutating !== null} /><button onClick={() => addContribution(goal)} disabled={mutating !== null} className="min-h-12 rounded-xl border-2 border-slate-800 bg-emerald-300 px-4 text-xs font-black disabled:opacity-50">反映</button></div>
         </article>;
       })}
     </div>
