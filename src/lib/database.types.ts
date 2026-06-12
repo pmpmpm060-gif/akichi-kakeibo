@@ -141,6 +141,63 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_transactions: {
+        Row: {
+          amount: number
+          category_id: string
+          created_at: string
+          day_of_month: number
+          description: string
+          enabled: boolean
+          end_month: string | null
+          household_id: string
+          id: string
+          start_month: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category_id: string
+          created_at?: string
+          day_of_month: number
+          description?: string
+          enabled?: boolean
+          end_month?: string | null
+          household_id?: string
+          id?: string
+          start_month: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string
+          created_at?: string
+          day_of_month?: number
+          description?: string
+          enabled?: boolean
+          end_month?: string | null
+          household_id?: string
+          id?: string
+          start_month?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_transactions_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
@@ -150,6 +207,8 @@ export type Database = {
           description: string
           household_id: string
           id: string
+          recurring_month: string | null
+          recurring_transaction_id: string | null
           type: string
           user_id: string
         }
@@ -161,6 +220,8 @@ export type Database = {
           description?: string
           household_id?: string
           id?: string
+          recurring_month?: string | null
+          recurring_transaction_id?: string | null
           type: string
           user_id?: string
         }
@@ -172,6 +233,8 @@ export type Database = {
           description?: string
           household_id?: string
           id?: string
+          recurring_month?: string | null
+          recurring_transaction_id?: string | null
           type?: string
           user_id?: string
         }
@@ -190,6 +253,13 @@ export type Database = {
             referencedRelation: "households"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "transactions_recurring_transaction_id_fkey"
+            columns: ["recurring_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_transactions"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -200,6 +270,10 @@ export type Database = {
       current_household_id: { Args: never; Returns: string }
       delete_unused_category: {
         Args: { target_category_id: string }
+        Returns: number
+      }
+      generate_recurring_transactions: {
+        Args: { target_month: string; target_user_id: string }
         Returns: number
       }
       get_effective_budgets: {

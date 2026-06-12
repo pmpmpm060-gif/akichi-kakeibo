@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight, CalendarClock, Search, RotateCcw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
@@ -43,6 +43,9 @@ function DashboardPageContent() {
   const [isAddingTransaction, setIsAddingTransaction] = useState(false);
   const [isUpdatingTransaction, setIsUpdatingTransaction] = useState(false);
   const [deletingTransactionId, setDeletingTransactionId] = useState<string | null>(null);
+  const [keyword, setKeyword] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'expense' | 'income'>('all');
+  const [filterCategoryId, setFilterCategoryId] = useState('all');
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithCategory | null>(null);
@@ -64,6 +67,17 @@ function DashboardPageContent() {
       const startOfMonth = `${yearMonth}-01`;
       const lastDay = new Date(jstYear, currentDate.getMonth() + 1, 0).getDate();
       const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+
+      const generateResult = await supabase.rpc('generate_recurring_transactions', {
+        target_user_id: currentUser,
+        target_month: startOfMonth,
+      });
+      if (ignore) return;
+      if (generateResult.error) {
+        setDataError(generateResult.error.message);
+        setLoading(false);
+        return;
+      }
 
       const [categoryResult, transactionResult] = await Promise.all([
         supabase.from('categories').select('*').eq('user_id', currentUser),
@@ -208,6 +222,15 @@ function DashboardPageContent() {
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
   const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
   const totalBalance = totalIncome - totalExpense;
+  const normalizedKeyword = keyword.trim().toLocaleLowerCase('ja');
+  const filteredTransactions = transactions.filter((transaction) => {
+    const matchesKeyword = !normalizedKeyword
+      || transaction.description.toLocaleLowerCase('ja').includes(normalizedKeyword)
+      || transaction.categories?.name.toLocaleLowerCase('ja').includes(normalizedKeyword);
+    const matchesType = filterType === 'all' || transaction.type === filterType;
+    const matchesCategory = filterCategoryId === 'all' || transaction.category_id === filterCategoryId;
+    return matchesKeyword && matchesType && matchesCategory;
+  });
 
   const getCalendarDays = () => {
     const start = new Date(jstYear, currentDate.getMonth(), 1);
@@ -332,6 +355,37 @@ function DashboardPageContent() {
             </button>
           </form>
 
+          <section className="flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-white p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-sm font-black"><Search className="h-4 w-4" />記録を検索・絞り込み</h2>
+              <button
+                type="button"
+                onClick={() => { setKeyword(''); setFilterType('all'); setFilterCategoryId('all'); }}
+                className="flex min-h-11 items-center gap-1 rounded-xl px-2 text-xs font-black text-slate-500"
+              >
+                <RotateCcw className="h-4 w-4" />リセット
+              </button>
+            </div>
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="メモ・カテゴリ名で検索"
+              className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base"
+            />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <select value={filterType} onChange={(event) => setFilterType(event.target.value as typeof filterType)} className="min-h-12 min-w-0 rounded-xl border-2 border-slate-800 bg-white px-3 text-base font-bold">
+                <option value="all">収入・支出すべて</option>
+                <option value="expense">支出のみ</option>
+                <option value="income">収入のみ</option>
+              </select>
+              <select value={filterCategoryId} onChange={(event) => setFilterCategoryId(event.target.value)} className="min-h-12 min-w-0 rounded-xl border-2 border-slate-800 bg-white px-3 text-base font-bold">
+                <option value="all">すべてのカテゴリ</option>
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.icon} {category.name}</option>)}
+              </select>
+            </div>
+            <p className="text-right text-xs font-black text-slate-500">{filteredTransactions.length}件を表示</p>
+          </section>
+
           {/* カレンダー形式の取引履歴 */}
           <div className="flex flex-col gap-3">
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">今月の記録カレンダー 📅</p>
@@ -357,7 +411,7 @@ function DashboardPageContent() {
                   const isToday = targetDateStr === todayStr;
                   const dayOfWeek = new Date(jstYear, currentDate.getMonth(), day).getDay();
 
-                  const dayTransactions = transactions.filter(t => t.date === targetDateStr);
+                  const dayTransactions = filteredTransactions.filter(t => t.date === targetDateStr);
                   const dayExpense = dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
                   const dayIncome = dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
 
@@ -395,10 +449,10 @@ function DashboardPageContent() {
                 <p className="px-1 text-sm font-black text-slate-800">
                   {selectedDate.slice(5).replace('-', '月')}日 の記録
                 </p>
-                {transactions.filter((transaction) => transaction.date === selectedDate).length === 0 ? (
+                {filteredTransactions.filter((transaction) => transaction.date === selectedDate).length === 0 ? (
                   <p className="py-4 text-center text-sm font-bold text-slate-400">この日の記録はありません</p>
                 ) : (
-                  transactions.filter((transaction) => transaction.date === selectedDate).map((transaction) => (
+                  filteredTransactions.filter((transaction) => transaction.date === selectedDate).map((transaction) => (
                     <button
                       key={transaction.id}
                       type="button"
@@ -529,6 +583,9 @@ function DashboardPageContent() {
           </div>
         </div>
       )}
+      <Link href={`/recurring?user=${currentUser}`} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border-2 border-slate-800 bg-indigo-100 text-sm font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+        <CalendarClock className="h-5 w-5" />固定費・定期取引を管理
+      </Link>
     </div>
   );
 }

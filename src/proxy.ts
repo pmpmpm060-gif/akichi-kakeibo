@@ -62,5 +62,7 @@ export const config = {
     '/dashboard/:path*',
     '/budgets/:path*',
     '/categories/:path*',
+    '/recurring/:path*',
+    '/reports/:path*',
   ],
 };

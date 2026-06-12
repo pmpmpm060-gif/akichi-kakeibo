@@ -3,7 +3,8 @@
 export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2 } from 'lucide-react';
+import Link from 'next/link';
+import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, BarChart3, CalendarClock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser } from '../lib/household-users';
@@ -212,6 +213,15 @@ function HomePageContent() {
       </div>
 
       {dataError && <DataErrorCard message={dataError} onRetry={retryFetch} />}
+
+      <div className="grid grid-cols-2 gap-3">
+        <Link href={`/reports?user=${currentUser}`} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border-2 border-slate-800 bg-indigo-100 text-xs font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+          <BarChart3 className="h-5 w-5" />月次レポート
+        </Link>
+        <Link href={`/recurring?user=${currentUser}`} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border-2 border-slate-800 bg-sky-100 text-xs font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+          <CalendarClock className="h-5 w-5" />定期取引
+        </Link>
+      </div>
 
       {/* 押下するとカテゴリ別の支出予算案内を展開する。 */}
       {!dataError && (
