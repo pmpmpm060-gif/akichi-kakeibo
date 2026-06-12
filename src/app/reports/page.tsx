@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ArrowDownRight, ArrowUpRight, BarChart3, Bookmark, ChevronLeft, ChevronRight, Loader2, Save, Tag, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, BarChart3, Bookmark, ChevronLeft, ChevronRight, Loader2, Save, ShieldCheck, Sparkles, Tag, TrendingDown, TrendingUp } from 'lucide-react';
 import { DataErrorCard } from '../../components/data-error-card';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
@@ -14,6 +14,20 @@ import { AppHeader } from '../../components/mobile-ui';
 type ReportTransaction = Pick<Transaction, 'id' | 'amount' | 'category_id' | 'date' | 'type'>;
 type TagRow = Database['public']['Tables']['tags']['Row'];
 type SavedFilter = Database['public']['Tables']['saved_filters']['Row'];
+type AiDiagnosis = Database['public']['Tables']['ai_household_diagnoses']['Row'];
+type RecommendedBudget = { categoryName: string; amount: number; reason: string };
+
+function jsonStrings(value: AiDiagnosis['strengths']) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function recommendedBudgets(value: AiDiagnosis['recommended_budgets']) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is RecommendedBudget => Boolean(
+    item && typeof item === 'object' && !Array.isArray(item)
+    && typeof item.categoryName === 'string' && typeof item.amount === 'number' && typeof item.reason === 'string'
+  ));
+}
 
 function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -35,6 +49,10 @@ function ReportsPageContent() {
   const [monthlyReview, setMonthlyReview] = useState('');
   const [savedReports, setSavedReports] = useState<SavedFilter[]>([]);
   const [savingReview, setSavingReview] = useState(false);
+  const [diagnoses, setDiagnoses] = useState<AiDiagnosis[]>([]);
+  const [selectedDiagnosisId, setSelectedDiagnosisId] = useState<string | null>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosisError, setDiagnosisError] = useState<string | null>(null);
 
   const currentMonth = monthKey(selectedDate);
   const previousDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1);
@@ -45,16 +63,17 @@ function ReportsPageContent() {
   useEffect(() => {
     let ignore = false;
     const fetchData = async () => {
-      const [transactionResult, categoryResult, tagResult, transactionTagResult, reviewResult, savedReportResult] = await Promise.all([
+      const [transactionResult, categoryResult, tagResult, transactionTagResult, reviewResult, savedReportResult, diagnosisResult] = await Promise.all([
         supabase.from('transactions').select('id, amount, category_id, date, type').eq('user_id', currentUser).gte('date', reportStart).lte('date', reportEnd),
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase.from('tags').select('*').eq('user_id', currentUser).order('created_at'),
         supabase.from('transaction_tags').select('transaction_id, tag_id'),
         supabase.from('monthly_reviews').select('content').eq('user_id', currentUser).eq('month', `${currentMonth}-01`).maybeSingle(),
         supabase.from('saved_filters').select('*').eq('user_id', currentUser).eq('filter_type', 'reports').order('created_at'),
+        supabase.from('ai_household_diagnoses').select('*').eq('user_id', currentUser).eq('target_month', `${currentMonth}-01`).order('created_at', { ascending: false }),
       ]);
       if (ignore) return;
-      const error = transactionResult.error || categoryResult.error || tagResult.error || transactionTagResult.error || reviewResult.error || savedReportResult.error;
+      const error = transactionResult.error || categoryResult.error || tagResult.error || transactionTagResult.error || reviewResult.error || savedReportResult.error || diagnosisResult.error;
       if (error) setDataError(error.message);
       else {
         setTransactions(transactionResult.data || []);
@@ -66,6 +85,8 @@ function ReportsPageContent() {
         }, {}));
         setMonthlyReview(reviewResult.data?.content || '');
         setSavedReports(savedReportResult.data || []);
+        setDiagnoses(diagnosisResult.data || []);
+        setSelectedDiagnosisId(diagnosisResult.data?.[0]?.id || null);
       }
       setLoading(false);
     };
@@ -147,6 +168,26 @@ function ReportsPageContent() {
     if (conditions.reportMode) setReportMode(conditions.reportMode);
     if (conditions.currentMonth) setSelectedDate(new Date(`${conditions.currentMonth}-01T00:00:00`));
   };
+  const selectedDiagnosis = diagnoses.find((diagnosis) => diagnosis.id === selectedDiagnosisId) || diagnoses[0] || null;
+  const runDiagnosis = async () => {
+    setDiagnosing(true);
+    setDiagnosisError(null);
+    try {
+      const response = await fetch('/api/diagnosis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUserId: currentUser, targetMonth: currentMonth }),
+      });
+      const result = await response.json() as { diagnosis?: AiDiagnosis; error?: string };
+      if (!response.ok || !result.diagnosis) throw new Error(result.error || 'AI診断に失敗しました。');
+      setDiagnoses((current) => [result.diagnosis!, ...current]);
+      setSelectedDiagnosisId(result.diagnosis.id);
+    } catch (error: unknown) {
+      setDiagnosisError(error instanceof Error ? error.message : 'AI診断に失敗しました。');
+    } finally {
+      setDiagnosing(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
@@ -180,6 +221,25 @@ function ReportsPageContent() {
           <p className="flex items-center gap-2 text-sm font-black">{expenseDifference <= 0 ? <TrendingDown className="h-5 w-5 text-sky-600" /> : <TrendingUp className="h-5 w-5 text-orange-600" />}前月との支出比較</p>
           <p className="mt-2 text-2xl font-black">{expenseDifference > 0 ? '+' : expenseDifference < 0 ? '-' : ''}¥{Math.abs(expenseDifference).toLocaleString()}</p>
           <p className="text-xs font-bold text-slate-500">{expenseChangePercent === null ? '前月の支出データがありません' : `前月比 ${expenseChangePercent > 0 ? '+' : ''}${expenseChangePercent}%`}</p>
+        </section>
+
+        <section className="flex flex-col gap-4 rounded-3xl border-2 border-slate-800 bg-violet-50 p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-black"><Sparkles className="h-5 w-5 text-violet-600" />AI家計診断</h2>
+            <p className="mt-1 flex items-start gap-1 text-xs font-bold leading-relaxed text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />AIへ送るのは集計値だけです。取引メモやレシート画像は送信しません。</p>
+          </div>
+          <button type="button" onClick={runDiagnosis} disabled={diagnosing} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-violet-300 text-sm font-black disabled:opacity-50">
+            {diagnosing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}{diagnosing ? '診断中...' : 'AI家計診断を実行'}
+          </button>
+          {diagnosisError && <p className="rounded-xl bg-rose-100 p-3 text-xs font-bold text-rose-700">{diagnosisError}</p>}
+          {diagnoses.length > 1 && <div className="flex gap-2 overflow-x-auto pb-1">{diagnoses.map((diagnosis, index) => <button type="button" key={diagnosis.id} onClick={() => setSelectedDiagnosisId(diagnosis.id)} className={`min-h-11 shrink-0 rounded-xl border px-3 text-xs font-black ${selectedDiagnosis?.id === diagnosis.id ? 'border-slate-800 bg-white' : 'border-slate-300 bg-violet-100 text-slate-500'}`}>{index === 0 ? '最新' : new Date(diagnosis.created_at).toLocaleDateString('ja-JP')}</button>)}</div>}
+          {selectedDiagnosis ? <article className="flex flex-col gap-4 rounded-2xl border-2 border-slate-800 bg-white p-4">
+            <div className="flex items-center gap-3"><span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-4 border-violet-300 text-2xl font-black">{selectedDiagnosis.score}</span><p className="text-sm font-bold leading-relaxed">{selectedDiagnosis.summary}</p></div>
+            {jsonStrings(selectedDiagnosis.strengths).length > 0 && <div><h3 className="text-xs font-black text-emerald-700">よいところ</h3><ul className="mt-1 space-y-1 text-xs font-bold text-slate-700">{jsonStrings(selectedDiagnosis.strengths).map((item) => <li key={item}>・{item}</li>)}</ul></div>}
+            {jsonStrings(selectedDiagnosis.concerns).length > 0 && <div><h3 className="text-xs font-black text-orange-700">気になるところ</h3><ul className="mt-1 space-y-1 text-xs font-bold text-slate-700">{jsonStrings(selectedDiagnosis.concerns).map((item) => <li key={item}>・{item}</li>)}</ul></div>}
+            {jsonStrings(selectedDiagnosis.actions).length > 0 && <div><h3 className="text-xs font-black text-violet-700">次にやること</h3><ol className="mt-1 space-y-1 text-xs font-bold text-slate-700">{jsonStrings(selectedDiagnosis.actions).map((item, index) => <li key={item}>{index + 1}. {item}</li>)}</ol></div>}
+            {recommendedBudgets(selectedDiagnosis.recommended_budgets).length > 0 && <div><h3 className="text-xs font-black text-sky-700">予算の提案</h3><div className="mt-2 space-y-2">{recommendedBudgets(selectedDiagnosis.recommended_budgets).map((item) => <div key={`${item.categoryName}-${item.amount}`} className="rounded-xl bg-sky-50 p-3"><p className="text-xs font-black">{item.categoryName}：¥{item.amount.toLocaleString()}</p><p className="mt-1 text-xs font-bold text-slate-600">{item.reason}</p></div>)}</div></div>}
+          </article> : <p className="rounded-xl border-2 border-dashed border-violet-300 p-4 text-center text-xs font-bold text-slate-500">まだ診断履歴はありません。</p>}
         </section>
 
         <section className="flex flex-col gap-3">

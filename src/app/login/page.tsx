@@ -9,11 +9,33 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [noticeMsg, setNoticeMsg] = useState('');
+
+  const authErrorMessage = (message: string) => {
+    const normalized = message.toLowerCase();
+    if (normalized.includes('user already registered')) {
+      return 'このメールアドレスは登録済みです。入力したパスワードでログインしてください。';
+    }
+    return message;
+  };
+
+  const validateSignUpInput = () => {
+    if (!email.trim()) {
+      setErrorMsg('メールアドレスを入力してください。');
+      return false;
+    }
+    if (password.length < 6) {
+      setErrorMsg('新規登録には6文字以上のパスワードを入力してください。');
+      return false;
+    }
+    return true;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
+    setNoticeMsg('');
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -37,13 +59,29 @@ export default function LoginPage() {
   };
 
   const handleSignUp = async () => {
-    if (!email || !password || loading) return;
-    setLoading(true); setErrorMsg('');
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) setErrorMsg(`登録エラー: ${error.message}`);
-    else if (data.session) window.location.href = '/setup';
-    else setErrorMsg('確認メールを送信しました。メール確認後にログインしてください。');
-    setLoading(false);
+    if (loading || !validateSignUpInput()) return;
+    setLoading(true);
+    setErrorMsg('');
+    setNoticeMsg('');
+    try {
+      const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+      if (error) {
+        setErrorMsg(`登録エラー: ${authErrorMessage(error.message)}`);
+      } else {
+        if (!data.session) {
+          setErrorMsg('登録は完了しましたが、ログインを開始できませんでした。パパへ連絡してください。');
+          return;
+        }
+        const request = await supabase.rpc('request_app_approval');
+        if (request.error) throw request.error;
+        window.location.href = request.data === 'approved' ? '/setup' : '/approval-pending';
+      }
+    } catch (error: unknown) {
+      console.error('Sign up failed unexpectedly:', error);
+      setErrorMsg('登録処理中に通信エラーが発生しました。時間を置いてもう一度お試しください。');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -64,6 +102,11 @@ export default function LoginPage() {
             {errorMsg}
           </p>
         )}
+        {noticeMsg && (
+          <p className="whitespace-pre-wrap rounded-xl border-2 border-emerald-600 bg-emerald-50 p-2.5 text-center text-xs font-black text-emerald-700">
+            {noticeMsg}
+          </p>
+        )}
 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-black text-slate-600 pl-1 flex items-center gap-1">
@@ -77,6 +120,7 @@ export default function LoginPage() {
             placeholder="example@mail.com" 
             className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-bold"
           />
+          <p className="pl-1 text-[11px] font-bold text-slate-400">新規登録時は6文字以上で入力してください。</p>
         </div>
 
         <div className="flex flex-col gap-1">
@@ -105,6 +149,7 @@ export default function LoginPage() {
           )}
         </button>
         <button type="button" onClick={handleSignUp} disabled={loading} className="min-h-12 rounded-2xl border-2 border-slate-800 bg-emerald-100 text-sm font-black disabled:opacity-50">新しく利用登録する</button>
+        <p className="text-center text-[11px] font-bold leading-relaxed text-slate-400">新規登録後はパパの承認を待ちます。確認メールは使用しません。</p>
       </form>
     </div>
   );

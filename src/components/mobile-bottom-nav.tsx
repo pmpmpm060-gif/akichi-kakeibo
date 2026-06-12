@@ -18,7 +18,7 @@ export function MobileBottomNav() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
 
-  if (pathname === '/login') return null;
+  if (pathname === '/login' || pathname === '/setup' || pathname === '/approval-pending') return null;
 
   return (
     <nav

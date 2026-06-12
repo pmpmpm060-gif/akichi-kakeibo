@@ -58,7 +58,20 @@ export async function proxy(req: NextRequest) {
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (!membership && req.nextUrl.pathname !== '/setup') {
+  const { data: approved } = await supabase.rpc('is_approved_user');
+  const isApprovalPage = req.nextUrl.pathname === '/approval-pending';
+
+  if (!approved && !isApprovalPage) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/approval-pending';
+    return NextResponse.redirect(url);
+  }
+  if (approved && isApprovalPage) {
+    const url = req.nextUrl.clone();
+    url.pathname = membership ? '/' : '/setup';
+    return NextResponse.redirect(url);
+  }
+  if (!membership && req.nextUrl.pathname !== '/setup' && !isApprovalPage) {
     const url = req.nextUrl.clone();
     url.pathname = '/setup';
     return NextResponse.redirect(url);
@@ -85,5 +98,7 @@ export const config = {
     '/more/:path*',
     '/tools/:path*',
     '/setup/:path*',
+    '/approval-pending/:path*',
+    '/admin/approvals/:path*',
   ],
 };

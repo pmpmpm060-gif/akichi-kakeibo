@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_household_diagnoses: {
+        Row: {
+          actions: Json
+          concerns: Json
+          created_at: string
+          household_id: string
+          id: string
+          recommended_budgets: Json
+          score: number
+          strengths: Json
+          summary: string
+          target_month: string
+          user_id: string
+        }
+        Insert: {
+          actions?: Json
+          concerns?: Json
+          created_at?: string
+          household_id?: string
+          id?: string
+          recommended_budgets?: Json
+          score: number
+          strengths?: Json
+          summary: string
+          target_month: string
+          user_id: string
+        }
+        Update: {
+          actions?: Json
+          concerns?: Json
+          created_at?: string
+          household_id?: string
+          id?: string
+          recommended_budgets?: Json
+          score?: number
+          strengths?: Json
+          summary?: string
+          target_month?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_household_diagnoses_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budgets: {
         Row: {
           amount: number
@@ -649,6 +699,36 @@ export type Database = {
           },
         ]
       }
+      user_approvals: {
+        Row: {
+          email: string
+          is_admin: boolean
+          requested_at: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          email: string
+          is_admin?: boolean
+          requested_at?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          email?: string
+          is_admin?: boolean
+          requested_at?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -684,6 +764,8 @@ export type Database = {
           category_type: string
         }[]
       }
+      is_app_admin: { Args: never; Returns: boolean }
+      is_approved_user: { Args: never; Returns: boolean }
       is_household_member: {
         Args: { target_household_id: string }
         Returns: boolean
@@ -691,6 +773,11 @@ export type Database = {
       is_household_profile: {
         Args: { target_household_id: string; target_profile_id: string }
         Returns: boolean
+      }
+      request_app_approval: { Args: never; Returns: string }
+      review_app_user: {
+        Args: { approve: boolean; target_user_id: string }
+        Returns: undefined
       }
       save_category_order: {
         Args: { category_ids: string[]; target_user_id: string }
