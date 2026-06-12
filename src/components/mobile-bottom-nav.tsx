@@ -2,15 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { FolderKanban, Home, Plus, PiggyBank, Wallet } from 'lucide-react';
+import { Home, List, Menu, Plus, PiggyBank } from 'lucide-react';
 import { parseHouseholdUser } from '../lib/household-users';
 
 const items = [
   { label: 'ホーム', path: '/', icon: Home },
-  { label: '家計簿', path: '/dashboard', icon: Wallet },
+  { label: '履歴', path: '/dashboard', hash: '#transaction-history', icon: List },
   { label: '記録する', path: '/dashboard', hash: '#transaction-form', icon: Plus, primary: true },
   { label: '予算', path: '/budgets', icon: PiggyBank },
-  { label: 'カテゴリ', path: '/categories', icon: FolderKanban },
+  { label: 'その他', path: '/more', icon: Menu },
 ];
 
 export function MobileBottomNav() {
@@ -36,7 +36,7 @@ export function MobileBottomNav() {
               key={item.label}
               href={href}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-black transition-colors ${
+              className={`flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl text-xs font-black transition-colors ${
                 item.primary
                   ? '-mt-5 min-h-16 border-2 border-slate-800 bg-emerald-300 text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]'
                   : isActive

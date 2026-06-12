@@ -8,6 +8,12 @@ body {
   overscroll-behavior-y: none;
 }
 
+/* スマホ実機で補足文字が潰れないよう、極小文字も12pxを下限にする。 */
+.text-\[10px\] {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
 input,
 select,
 textarea {

@@ -1,13 +1,13 @@
 "use client";
 
 import { Suspense, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, CalendarClock, Edit2, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { CalendarClock, ChevronDown, ChevronUp, Edit2, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { DataErrorCard } from '../../components/data-error-card';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import type { Category, RecurringTransaction } from '../../lib/database-helpers';
+import { AppHeader, useConfirm } from '../../components/mobile-ui';
 
 type RecurringWithCategory = RecurringTransaction & {
   categories: Pick<Category, 'name' | 'icon' | 'type'> | null;
@@ -21,6 +21,7 @@ function currentMonthString() {
 function RecurringPageContent() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const confirmAction = useConfirm();
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<RecurringWithCategory[]>([]);
   const [categoryId, setCategoryId] = useState('');
@@ -35,6 +36,7 @@ function RecurringPageContent() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [editingItem, setEditingItem] = useState<RecurringWithCategory | null>(null);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -107,6 +109,7 @@ function RecurringPageContent() {
         setItems((current) => [data as RecurringWithCategory, ...current]);
         setAmount('');
         setDescription('');
+        setIsAddFormOpen(false);
         const { error: generateError } = await supabase.rpc('generate_recurring_transactions', {
           target_user_id: currentUser,
           target_month: `${currentMonthString()}-01`,
@@ -147,7 +150,7 @@ function RecurringPageContent() {
   };
 
   const handleDelete = async (item: RecurringWithCategory) => {
-    if (mutatingId || !confirm(`「${item.description || item.categories?.name || '定期取引'}」を削除しますか？\n生成済みの家計簿記録は残ります。`)) return;
+    if (mutatingId || !await confirmAction(`「${item.description || item.categories?.name || '定期取引'}」を削除しますか？\n生成済みの家計簿記録は残ります。`)) return;
     setMutatingId(item.id);
     const { error } = await supabase.from('recurring_transactions').delete().eq('id', item.id);
     if (error) {
@@ -189,19 +192,12 @@ function RecurringPageContent() {
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
-      <header className="flex items-center justify-between pt-2">
-        <div className="flex items-center gap-3">
-          <Link href={`/?user=${currentUser}`} className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <h1 className="text-2xl font-black">定期取引</h1>
-        </div>
-        <span className="rounded-full border-2 border-slate-800 bg-indigo-100 px-2 py-1 text-[10px] font-black">
-          {currentUser === 'user_a' ? 'ママ' : 'パパ'}
-        </span>
-      </header>
+      <AppHeader title="定期取引" currentUser={currentUser} />
 
-      <form onSubmit={handleAdd} className="flex flex-col gap-4 rounded-3xl border-2 border-slate-800 bg-indigo-50 p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+      <button type="button" onClick={() => setIsAddFormOpen((current) => !current)} className="flex min-h-12 items-center justify-between rounded-2xl border-2 border-slate-800 bg-indigo-100 px-4 text-sm font-black shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
+        <span className="flex items-center gap-2"><Plus className="h-5 w-5" />定期取引を追加</span>{isAddFormOpen ? <ChevronUp /> : <ChevronDown />}
+      </button>
+      {isAddFormOpen && <form onSubmit={handleAdd} className="flex flex-col gap-4 rounded-3xl border-2 border-slate-800 bg-indigo-50 p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
         <h2 className="flex items-center gap-2 font-black"><Plus className="h-5 w-5" />定期取引を追加</h2>
         <label className="flex flex-col gap-1 text-xs font-black">
           分類
@@ -232,7 +228,7 @@ function RecurringPageContent() {
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-5 w-5" />}
           定期取引を保存する
         </button>
-      </form>
+      </form>}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">登録済みの定期取引</h2>
@@ -256,8 +252,8 @@ function RecurringPageContent() {
           </article>
         ))}
       </section>
-      {editingItem && <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
-        <div className="mobile-sheet w-full max-w-md overflow-hidden rounded-t-3xl border-4 border-slate-800 bg-white sm:rounded-3xl">
+      {editingItem && <div onClick={() => setEditingItem(null)} className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
+        <div onClick={(event) => event.stopPropagation()} className="mobile-sheet w-full max-w-md overflow-hidden rounded-t-3xl border-4 border-slate-800 bg-white sm:rounded-3xl">
           <div className="flex items-center justify-between border-b-2 border-slate-800 bg-indigo-100 p-4"><h2 className="font-black">定期取引を編集</h2><button onClick={() => setEditingItem(null)} className="flex min-h-11 min-w-11 items-center justify-center"><X className="h-5 w-5" /></button></div>
           <form onSubmit={handleUpdate} className="flex max-h-[calc(90dvh-76px)] flex-col gap-3 overflow-y-auto p-4">
             <select value={editingItem.category_id} onChange={(event) => setEditingItem({ ...editingItem, category_id: event.target.value })} className="min-h-12 rounded-xl border-2 border-slate-800 bg-white px-3 text-base">{categories.map((category) => <option key={category.id} value={category.id}>{category.icon} {category.name}</option>)}</select>

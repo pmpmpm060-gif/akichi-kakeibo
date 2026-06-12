@@ -3,17 +3,19 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Save, Loader2, Repeat2 } from 'lucide-react';
+import { Save, Loader2, Repeat2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
 import type { Budget, Category } from '../../lib/database-helpers';
+import { AppHeader, useToast } from '../../components/mobile-ui';
 
 const isValidBudgetAmount = (amount: number) => Number.isSafeInteger(amount) && amount >= 0;
 
 function BudgetsPageContent() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const notify = useToast();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<{ [key: string]: number }>({});
@@ -22,6 +24,7 @@ function BudgetsPageContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     // ユーザー切替前の通信結果が後から返る場合があるため、古い結果は無視する。
@@ -63,6 +66,7 @@ function BudgetsPageContent() {
         budgetMap[budget.category_id] = budget.amount;
       });
       setBudgets(budgetMap);
+      setHasChanges(false);
       setLoading(false);
     };
 
@@ -85,6 +89,7 @@ function BudgetsPageContent() {
       ...current,
       [categoryId]: Number.isNaN(amount) ? 0 : amount,
     }));
+    setHasChanges(true);
   };
 
   const handleCarryoverChange = (categoryId: string, enabled: boolean) => {
@@ -92,6 +97,7 @@ function BudgetsPageContent() {
       ...current,
       [categoryId]: enabled,
     }));
+    setHasChanges(true);
   };
 
   const handleSaveBudgets = async () => {
@@ -120,7 +126,8 @@ function BudgetsPageContent() {
       if (error) {
         alert('予算の保存に失敗しました：' + error.message);
       } else {
-        alert('基本予算と繰越設定を保存しました！ 🐷✨');
+        notify('基本予算と繰越設定を保存しました');
+        setHasChanges(false);
       }
     } catch {
       alert('予算の保存に失敗しました。通信状況を確認して、もう一度お試しください。');
@@ -190,21 +197,7 @@ function BudgetsPageContent() {
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
-      <div className="flex items-center justify-between pt-2">
-        <div className="flex items-center gap-3">
-          <Link 
-            href={`/?user=${currentUser}`}
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
-          >
-            <ArrowLeft className="w-5 h-5 text-slate-800" strokeWidth={2.5} />
-          </Link>
-          <h1 className="text-2xl font-black tracking-tight">予算を決める</h1>
-        </div>
-        <span className={`text-[10px] font-black border-2 border-slate-800 px-2.5 py-1 rounded-full shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]
-          ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}>
-          {currentUser === 'user_a' ? '👩‍🦰 ママ' : '👨 パパ'}
-        </span>
-      </div>
+      <AppHeader title="予算を決める" currentUser={currentUser} />
 
       <div className="bg-sky-100 border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center gap-3">
         <div className="text-2xl">💡</div>
@@ -253,6 +246,13 @@ function BudgetsPageContent() {
           </div>
         )}
       </div>
+      {!loading && !dataError && categories.length > 0 && hasChanges && (
+        <div className="mobile-safe-bottom fixed inset-x-0 bottom-[4.5rem] z-30 mx-auto max-w-md border-t-2 border-slate-800 bg-white/95 p-3 backdrop-blur">
+          <button onClick={handleSaveBudgets} disabled={isSaving} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-800 bg-sky-300 text-sm font-black shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] disabled:opacity-60">
+            {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}変更した予算を保存
+          </button>
+        </div>
+      )}
     </div>
   );
 }

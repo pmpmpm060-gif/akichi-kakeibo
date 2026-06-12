@@ -1,13 +1,14 @@
 "use client";
 
 import { Suspense, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, ArrowDownRight, ArrowUpRight, BarChart3, ChevronLeft, ChevronRight, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, BarChart3, ChevronLeft, ChevronRight, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
 import { DataErrorCard } from '../../components/data-error-card';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import type { Category, Transaction } from '../../lib/database-helpers';
+import { useHorizontalSwipe } from '../../components/mobile-ui';
+import { AppHeader } from '../../components/mobile-ui';
 
 type ReportTransaction = Pick<Transaction, 'amount' | 'category_id' | 'date' | 'type'>;
 
@@ -25,6 +26,7 @@ function ReportsPageContent() {
   const [retryKey, setRetryKey] = useState(0);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [reportMode, setReportMode] = useState<'monthly' | 'yearly'>('monthly');
+  const [selectedTrendKey, setSelectedTrendKey] = useState<string | null>(null);
 
   const currentMonth = monthKey(selectedDate);
   const previousDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1);
@@ -94,20 +96,20 @@ function ReportsPageContent() {
     setDataError(null);
     setSelectedDate((current) => new Date(current.getFullYear(), current.getMonth() + increment, 1));
   };
+  const reportSwipe = useHorizontalSwipe(
+    () => changeMonth(reportMode === 'monthly' ? -1 : -12),
+    () => changeMonth(reportMode === 'monthly' ? 1 : 12)
+  );
+  const selectedTrend = monthlyTrend.find((month) => month.key === selectedTrendKey);
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
-      <header className="flex items-center gap-3 pt-2">
-        <Link href={`/?user=${currentUser}`} className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div><p className="text-xs font-black text-slate-400">{currentMonth.replace('-', '年')}月</p><h1 className="text-2xl font-black">家計レポート</h1></div>
-      </header>
+      <AppHeader title="家計レポート" currentUser={currentUser} subtitle={`${currentMonth.replace('-', '年')}月`} />
       <div className="grid grid-cols-2 gap-2 rounded-2xl border-2 border-slate-800 bg-slate-100 p-1">
         <button onClick={() => setReportMode('monthly')} className={`min-h-11 rounded-xl text-sm font-black ${reportMode === 'monthly' ? 'bg-white shadow' : 'text-slate-500'}`}>月別</button>
         <button onClick={() => setReportMode('yearly')} className={`min-h-11 rounded-xl text-sm font-black ${reportMode === 'yearly' ? 'bg-white shadow' : 'text-slate-500'}`}>年間</button>
       </div>
-      <div className="flex items-center justify-between rounded-2xl border-2 border-slate-800 bg-indigo-50 p-2">
+      <div {...reportSwipe} className="flex items-center justify-between rounded-2xl border-2 border-slate-800 bg-indigo-50 p-2">
         <button onClick={() => changeMonth(reportMode === 'monthly' ? -1 : -12)} className="flex min-h-11 min-w-11 items-center justify-center"><ChevronLeft /></button>
         <span className="font-black">{reportMode === 'monthly' ? `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月` : `${selectedDate.getFullYear()}年`}</span>
         <button onClick={() => changeMonth(reportMode === 'monthly' ? 1 : 12)} className="flex min-h-11 min-w-11 items-center justify-center"><ChevronRight /></button>
@@ -137,15 +139,16 @@ function ReportsPageContent() {
           <h2 className="flex items-center gap-2 text-sm font-black"><BarChart3 className="h-5 w-5" />{selectedDate.getFullYear()}年の推移</h2>
           <div className="flex h-48 items-end justify-between gap-2 rounded-3xl border-2 border-slate-800 bg-white p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
             {monthlyTrend.map((month) => (
-              <div key={month.key} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
+              <button type="button" onClick={() => setSelectedTrendKey(month.key)} key={month.key} className={`flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1 rounded-md ${selectedTrendKey === month.key ? 'bg-amber-100' : ''}`}>
                 <div className="flex h-full w-full items-end justify-center gap-0.5">
                   <div title={`収入 ¥${month.income.toLocaleString()}`} className="w-2.5 rounded-t bg-emerald-400" style={{ height: `${Math.max(2, (month.income / maxTrendAmount) * 100)}%` }} />
                   <div title={`支出 ¥${month.expense.toLocaleString()}`} className="w-2.5 rounded-t bg-rose-400" style={{ height: `${Math.max(2, (month.expense / maxTrendAmount) * 100)}%` }} />
                 </div>
                 <span className="text-[10px] font-black text-slate-500">{month.label}</span>
-              </div>
+              </button>
             ))}
           </div>
+          {selectedTrend && <p className="rounded-xl bg-indigo-50 p-3 text-center text-xs font-black">{selectedTrend.label}：収入 ¥{selectedTrend.income.toLocaleString()} ／ 支出 ¥{selectedTrend.expense.toLocaleString()}</p>}
           <p className="text-center text-[10px] font-bold text-slate-500"><span className="text-emerald-600">■ 収入</span>　<span className="text-rose-500">■ 支出</span></p>
         </section>
 

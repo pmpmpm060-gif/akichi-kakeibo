@@ -53,7 +53,7 @@ const guides: Record<string, ScreenGuide> = {
       '登録済みカテゴリの編集ボタンから、名前・種類・アイコンを変更できます。',
       '削除は編集画面の一番下から行います。',
     ],
-    tip: '家計簿記録があるカテゴリは、安全のため削除できないぶー！',
+    tip: '家計簿記録や定期取引で使っているカテゴリは、安全のため削除できないぶー！',
   },
   '/recurring': {
     title: '定期取引画面の使い方',
@@ -88,6 +88,16 @@ const guides: Record<string, ScreenGuide> = {
     ],
     tip: '積立残高が0円未満になる取り崩しはできないぶー！',
   },
+  '/more': {
+    title: 'その他の機能の使い方',
+    introduction: '日常操作以外の管理・分析機能をまとめた画面だぶー！',
+    steps: [
+      'カテゴリ設定では、収入・支出の分類を管理できます。',
+      '家計レポートでは、月別・年間の家計傾向を確認できます。',
+      '定期取引と貯金目標も、この画面から開けます。',
+    ],
+    tip: '普段の記録は下部中央の「記録する」からすぐ始められるぶー！',
+  },
   '/login': {
     title: 'ログイン画面の使い方',
     introduction: '登録済みのアカウントで家計簿へ入る画面だぶー！',
@@ -117,11 +127,12 @@ export function ScreenHelpPig() {
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
+        <div onClick={() => setIsOpen(false)} className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
           <section
             role="dialog"
             aria-modal="true"
             aria-label={guide.title}
+            onClick={(event) => event.stopPropagation()}
             className="mobile-sheet w-full max-w-md overflow-hidden rounded-t-3xl border-4 border-slate-800 bg-white shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] sm:rounded-3xl"
           >
             <header className="flex items-center justify-between border-b-2 border-slate-800 bg-pink-100 p-4">

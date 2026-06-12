@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight, CalendarClock, Search, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight, CalendarClock, Search, RotateCcw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
+import { AppHeader, useConfirm, useHorizontalSwipe, useToast } from '../../components/mobile-ui';
 import {
   type Category,
   type TransactionWithCategory,
@@ -16,6 +17,9 @@ function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const notify = useToast();
+  const confirmAction = useConfirm();
+  const descriptionInputRef = useRef<HTMLInputElement>(null);
 
   // currentDateは表示対象の月を表す。取引入力日は別のdate状態で管理する。
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -46,6 +50,7 @@ function DashboardPageContent() {
   const [keyword, setKeyword] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'expense' | 'income'>('all');
   const [filterCategoryId, setFilterCategoryId] = useState('all');
+  const [recentCategoryIds, setRecentCategoryIds] = useState<string[]>([]);
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithCategory | null>(null);
@@ -57,6 +62,7 @@ function DashboardPageContent() {
     setDataError(null);
     setCurrentDate(newDate);
   };
+  const monthSwipe = useHorizontalSwipe(() => changeMonth(-1), () => changeMonth(1));
 
   useEffect(() => {
     // 月・ユーザー切替前の通信結果が後から返る場合があるため、古い結果は無視する。
@@ -160,6 +166,8 @@ function DashboardPageContent() {
       setTransactions((current) => [data[0], ...current]);
       setAmount("");
       setDescription("");
+      setRecentCategoryIds((current) => [categoryId, ...current.filter((id) => id !== categoryId)].slice(0, 4));
+      notify('家計簿に記録しました');
       router.refresh();
     }
     setIsAddingTransaction(false);
@@ -205,7 +213,7 @@ function DashboardPageContent() {
 
   const handleDeleteTransaction = async (id: string) => {
     if (deletingTransactionId) return;
-    if (!confirm('この記録を削除しますか？')) return;
+    if (!await confirmAction('この記録を削除しますか？')) return;
 
     setDeletingTransactionId(id);
     const { error } = await supabase.from('transactions').delete().eq('id', id);
@@ -247,23 +255,10 @@ function DashboardPageContent() {
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
-      {/* ヘッダー */}
-      <div className="flex items-center justify-between pt-2">
-        <div className="flex items-center gap-3">
-          <Link href={`/?user=${currentUser}`} className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-            <ArrowLeft className="w-5 h-5 text-slate-800" strokeWidth={2.5} />
-          </Link>
-          <h1 className="text-2xl font-black tracking-tight">家計簿を付ける</h1>
-        </div>
-        
-        <span className={`text-[10px] font-black border-2 border-slate-800 px-2.5 py-1 rounded-full shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]
-          ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}>
-          {currentUser === 'user_a' ? '👩‍🦰 ママ' : '👨 パパ'}
-        </span>
-      </div>
+      <AppHeader title="家計簿を付ける" currentUser={currentUser} />
 
       {/* 月選択と選択月の集計 */}
-      <div className="bg-emerald-100 border-2 border-slate-800 rounded-3xl p-3 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-3">
+      <div {...monthSwipe} className="bg-emerald-100 border-2 border-slate-800 rounded-3xl p-3 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <button aria-label="前の月" onClick={() => changeMonth(-1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border-2 border-slate-800 bg-white active:bg-slate-100">
             <ChevronLeft className="w-6 h-6 text-slate-800" strokeWidth={2.5} />
@@ -322,10 +317,16 @@ function DashboardPageContent() {
             <h2 className="font-black text-base text-emerald-950 flex items-center gap-1.5">
               <Plus className="w-5 h-5" strokeWidth={3} /> 今日の支出・収入
             </h2>
+            {recentCategoryIds.length > 0 && <div className="flex gap-2 overflow-x-auto pb-1">
+              {recentCategoryIds.map((id) => {
+                const category = categories.find((item) => item.id === id);
+                return category ? <button key={id} type="button" onClick={() => setCategoryId(id)} className={`min-h-11 shrink-0 rounded-xl border-2 px-3 text-xs font-black ${categoryId === id ? 'border-slate-800 bg-amber-200' : 'border-slate-300 bg-white'}`}>{category.icon} {category.name}</button> : null;
+              })}
+            </div>}
 
             <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex min-w-0 flex-col gap-1">
-                <label className="text-xs font-black text-emerald-900 pl-1">いつ？</label>
+                <div className="flex items-center justify-between"><label className="text-xs font-black text-emerald-900 pl-1">いつ？</label><button type="button" onClick={() => setDate(todayStr)} className="min-h-11 px-2 text-xs font-black text-emerald-700">今日</button></div>
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mobile-date-input min-h-12 min-w-0 max-w-full rounded-xl border-2 border-slate-800 px-3 py-2 text-base font-bold" />
               </div>
               <div className="flex min-w-0 flex-col gap-1">
@@ -340,12 +341,12 @@ function DashboardPageContent() {
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-black text-emerald-900 pl-1">いくら？</label>
-              <input type="number" inputMode="numeric" min="1" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="金額を入力" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-black" />
+              <input type="number" inputMode="numeric" enterKeyHint="next" min="1" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); descriptionInputRef.current?.focus(); } }} placeholder="金額を入力" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-black" />
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-black text-emerald-900 pl-1">メモ（何に使った？）</label>
-              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="カフェ、お買い物など（任意）" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-bold" />
+              <input ref={descriptionInputRef} type="text" enterKeyHint="done" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="カフェ、お買い物など（任意）" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-bold" />
             </div>
 
             <button type="submit" disabled={isAddingTransaction} className="w-full bg-slate-900 text-white font-black py-3 rounded-2xl border-2 border-slate-800 text-sm mt-1 disabled:opacity-60 flex items-center justify-center gap-2">
@@ -355,7 +356,7 @@ function DashboardPageContent() {
             </button>
           </form>
 
-          <section className="flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-white p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+          <section id="transaction-history" className="scroll-mt-4 flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-white p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
             <div className="flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-sm font-black"><Search className="h-4 w-4" />記録を検索・絞り込み</h2>
               <button
@@ -477,8 +478,8 @@ function DashboardPageContent() {
 
       {/* 選択日の取引編集モーダル */}
       {selectedDate && editingTransaction && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="mobile-sheet w-full max-w-md overflow-hidden rounded-t-3xl border-4 border-slate-800 bg-white shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] animate-in fade-in slide-in-from-bottom-4 duration-200 sm:rounded-3xl">
+        <div onClick={() => setEditingTransaction(null)} className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
+          <div onClick={(event) => event.stopPropagation()} className="mobile-sheet w-full max-w-md overflow-hidden rounded-t-3xl border-4 border-slate-800 bg-white shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] animate-in fade-in slide-in-from-bottom-4 duration-200 sm:rounded-3xl">
             <div className="bg-amber-100 border-b-2 border-slate-800 p-4 flex justify-between items-center">
               <span className="font-black text-base text-slate-800">
                 {selectedDate.slice(5).replace('-', '月')}日 の記録

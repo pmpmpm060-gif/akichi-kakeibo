@@ -1,19 +1,20 @@
 "use client";
 
 import { Suspense, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, Loader2, PiggyBank, Plus, Trash2 } from 'lucide-react';
+import { Loader2, PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import type { SavingsContribution, SavingsGoal } from '../../lib/database-helpers';
 import { DataErrorCard } from '../../components/data-error-card';
+import { AppHeader, useConfirm } from '../../components/mobile-ui';
 
 type GoalWithTotal = SavingsGoal & { total: number };
 
 function SavingsPageContent() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const confirmAction = useConfirm();
   const [goals, setGoals] = useState<GoalWithTotal[]>([]);
   const [name, setName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
@@ -28,21 +29,30 @@ function SavingsPageContent() {
   useEffect(() => {
     let ignore = false;
     const fetchData = async () => {
-      const [goalResult, contributionResult] = await Promise.all([
-        supabase.from('savings_goals').select('*').eq('user_id', currentUser).order('created_at', { ascending: false }),
-        supabase.from('savings_contributions').select('*').eq('user_id', currentUser),
-      ]);
-      if (ignore) return;
-      const error = goalResult.error || contributionResult.error;
-      if (error) setDataError(error.message);
-      else {
+      try {
+        const [goalResult, contributionResult] = await Promise.all([
+          supabase.from('savings_goals').select('*').eq('user_id', currentUser).order('created_at', { ascending: false }),
+          supabase.from('savings_contributions').select('*').eq('user_id', currentUser),
+        ]);
+        if (ignore) return;
+        const error = goalResult.error || contributionResult.error;
+        if (error) {
+          setDataError(error.message);
+          return;
+        }
         const contributions = (contributionResult.data || []) as SavingsContribution[];
         setGoals((goalResult.data || []).map((goal) => ({
           ...goal,
           total: contributions.filter((item) => item.goal_id === goal.id).reduce((sum, item) => sum + item.amount, 0),
         })));
+        setDataError(null);
+      } catch {
+        if (!ignore) {
+          setDataError('データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
+        }
+      } finally {
+        if (!ignore) setLoading(false);
       }
-      setLoading(false);
     };
     void fetchData();
     return () => { ignore = true; };
@@ -53,15 +63,20 @@ function SavingsPageContent() {
     const amount = Number(targetAmount);
     if (mutating || !name.trim() || !Number.isSafeInteger(amount) || amount <= 0) return;
     setMutating('new');
-    const { data, error } = await supabase.from('savings_goals').insert({
-      user_id: currentUser, name: name.trim(), target_amount: amount, target_date: targetDate || null,
-    }).select().single();
-    if (error) alert('目標の追加に失敗しました：' + error.message);
-    else {
-      setGoals((current) => [{ ...data, total: 0 }, ...current]);
-      setName(''); setTargetAmount(''); setTargetDate('');
+    try {
+      const { data, error } = await supabase.from('savings_goals').insert({
+        user_id: currentUser, name: name.trim(), target_amount: amount, target_date: targetDate || null,
+      }).select().single();
+      if (error) alert('目標の追加に失敗しました：' + error.message);
+      else {
+        setGoals((current) => [{ ...data, total: 0 }, ...current]);
+        setName(''); setTargetAmount(''); setTargetDate('');
+      }
+    } catch {
+      alert('目標の追加に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setMutating(null);
     }
-    setMutating(null);
   };
 
   const addContribution = async (goal: GoalWithTotal) => {
@@ -75,30 +90,37 @@ function SavingsPageContent() {
       return;
     }
     setMutating(goal.id);
-    const { error } = await supabase.from('savings_contributions').insert({ user_id: currentUser, goal_id: goal.id, amount });
-    if (error) alert('積立の登録に失敗しました：' + error.message);
-    else {
-      setGoals((current) => current.map((item) => item.id === goal.id ? { ...item, total: item.total + amount } : item));
-      setContributionAmounts((current) => ({ ...current, [goal.id]: '' }));
+    try {
+      const { error } = await supabase.from('savings_contributions').insert({ user_id: currentUser, goal_id: goal.id, amount });
+      if (error) alert('積立の登録に失敗しました：' + error.message);
+      else {
+        setGoals((current) => current.map((item) => item.id === goal.id ? { ...item, total: item.total + amount } : item));
+        setContributionAmounts((current) => ({ ...current, [goal.id]: '' }));
+      }
+    } catch {
+      alert('積立の登録に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setMutating(null);
     }
-    setMutating(null);
   };
 
   const deleteGoal = async (goal: GoalWithTotal) => {
-    if (mutating || !confirm(`「${goal.name}」と積立履歴を削除しますか？`)) return;
+    if (mutating || !await confirmAction(`「${goal.name}」と積立履歴を削除しますか？`)) return;
     setMutating(goal.id);
-    const { error } = await supabase.from('savings_goals').delete().eq('id', goal.id);
-    if (error) alert('削除に失敗しました：' + error.message);
-    else setGoals((current) => current.filter((item) => item.id !== goal.id));
-    setMutating(null);
+    try {
+      const { error } = await supabase.from('savings_goals').delete().eq('id', goal.id);
+      if (error) alert('削除に失敗しました：' + error.message);
+      else setGoals((current) => current.filter((item) => item.id !== goal.id));
+    } catch {
+      alert('削除に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setMutating(null);
+    }
   };
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
-      <header className="flex items-center gap-3 pt-2">
-        <Link href={`/?user=${currentUser}`} className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"><ArrowLeft className="h-5 w-5" /></Link>
-        <h1 className="text-2xl font-black">貯金目標</h1>
-      </header>
+      <AppHeader title="貯金目標" currentUser={currentUser} />
       <form onSubmit={addGoal} className="flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-emerald-50 p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
         <h2 className="flex items-center gap-2 font-black"><Plus className="h-5 w-5" />新しい目標</h2>
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="旅行、緊急資金など" className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />

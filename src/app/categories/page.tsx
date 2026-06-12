@@ -2,12 +2,12 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2, Loader2, Edit2, X } from 'lucide-react';
+import { Plus, Trash2, Loader2, Edit2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { DataErrorCard } from '../../components/data-error-card';
 import type { Category } from '../../lib/database-helpers';
 import { parseHouseholdUser } from '../../lib/household-users';
+import { AppHeader, useConfirm, useToast } from '../../components/mobile-ui';
 
 // カテゴリカードの見た目を揃えるため、選択可能なアイコンを限定する。
 const ICON_PALETTE = [
@@ -17,6 +17,8 @@ const ICON_PALETTE = [
 function CategoriesPageContent() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const confirmAction = useConfirm();
+  const notify = useToast();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +27,7 @@ function CategoriesPageContent() {
   const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   
   const [name, setName] = useState("");
   const [type, setType] = useState<"expense" | "income">("expense");
@@ -85,6 +88,7 @@ function CategoriesPageContent() {
       } else {
         setCategories((current) => [data, ...current]);
         setName("");
+        setIsAddFormOpen(false);
       }
     } catch {
       alert('追加に失敗しました。通信状況を確認して、もう一度お試しください。');
@@ -128,7 +132,7 @@ function CategoriesPageContent() {
 
   const handleDeleteCategory = async (category: Category) => {
     if (deletingCategoryId) return;
-    if (!confirm(`「${category.name}」を削除しますか？\n関連する予算設定も削除されます。家計簿の記録がある場合は削除できません。`)) return;
+    if (!await confirmAction(`「${category.name}」を削除しますか？\n関連する予算設定も削除されます。家計簿の記録や定期取引がある場合は削除できません。`)) return;
 
     setDeletingCategoryId(category.id);
     try {
@@ -140,7 +144,9 @@ function CategoriesPageContent() {
       if (error) {
         const message = error.message.includes('transaction records')
           ? 'このカテゴリには家計簿の記録があるため削除できません。先に記録を別カテゴリへ変更してください。'
-          : '削除に失敗しました：' + error.message;
+          : error.message.includes('recurring transactions')
+            ? 'このカテゴリは定期取引で使用中のため削除できません。先に定期取引のカテゴリを変更するか、定期取引を削除してください。'
+            : '削除に失敗しました：' + error.message;
         alert(message);
       } else {
         setCategories((current) => current.filter((cat) => cat.id !== category.id));
@@ -148,7 +154,7 @@ function CategoriesPageContent() {
         const budgetMessage = deletedBudgetCount > 0
           ? `関連する予算設定 ${deletedBudgetCount} 件も削除しました。`
           : '関連する予算設定はありませんでした。';
-        alert(`カテゴリを削除しました。\n${budgetMessage}`);
+        notify(`カテゴリを削除しました。${budgetMessage}`);
       }
     } catch {
       alert('削除に失敗しました。通信状況を確認して、もう一度お試しください。');
@@ -159,25 +165,13 @@ function CategoriesPageContent() {
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
-      {/* ヘッダー */}
-      <div className="flex items-center justify-between pt-2">
-        <div className="flex items-center gap-3">
-          <Link
-            href={`/?user=${currentUser}`}
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
-          >
-            <ArrowLeft className="w-5 h-5 text-slate-800" strokeWidth={2.5} />
-          </Link>
-          <h1 className="text-2xl font-black tracking-tight">カテゴリ設定</h1>
-        </div>
-        <span className={`text-[10px] font-black border-2 border-slate-800 px-2.5 py-1 rounded-full shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]
-          ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}>
-          {currentUser === 'user_a' ? '👩‍🦰 ママ' : '👨 パパ'}
-        </span>
-      </div>
+      <AppHeader title="カテゴリ設定" currentUser={currentUser} />
 
+      <button type="button" onClick={() => setIsAddFormOpen((current) => !current)} className="flex min-h-12 items-center justify-between rounded-2xl border-2 border-slate-800 bg-pink-100 px-4 text-sm font-black shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
+        <span className="flex items-center gap-2"><Plus className="h-5 w-5" />新しいカテゴリを追加</span>{isAddFormOpen ? <ChevronUp /> : <ChevronDown />}
+      </button>
       {/* 新規登録カード */}
-      <form 
+      {isAddFormOpen && <form
         onSubmit={handleAddCategory}
         className="bg-pink-100 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4"
       >
@@ -245,7 +239,7 @@ function CategoriesPageContent() {
             ? <><Loader2 className="w-4 h-4 animate-spin inline mr-2" />追加しています</>
             : 'このカテゴリを追加する ✨'}
         </button>
-      </form>
+      </form>}
 
       {/* カテゴリ一覧 */}
       <div className="flex flex-col gap-3">
@@ -298,8 +292,8 @@ function CategoriesPageContent() {
 
       {/* カテゴリ編集モーダル */}
       {editingCategory && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="mobile-sheet w-full max-w-md overflow-hidden rounded-t-3xl border-4 border-slate-800 bg-white shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] animate-in fade-in slide-in-from-bottom-4 duration-200 sm:rounded-3xl">
+        <div onClick={() => setEditingCategory(null)} className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
+          <div onClick={(event) => event.stopPropagation()} className="mobile-sheet w-full max-w-md overflow-hidden rounded-t-3xl border-4 border-slate-800 bg-white shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] animate-in fade-in slide-in-from-bottom-4 duration-200 sm:rounded-3xl">
             <div className="bg-amber-100 border-b-2 border-slate-800 p-4 flex justify-between items-center">
               <span className="font-black text-base text-slate-800">
                 カテゴリの修正 📝
