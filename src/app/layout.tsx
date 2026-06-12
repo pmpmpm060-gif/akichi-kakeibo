@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { MobileBottomNav } from "../components/mobile-bottom-nav";
+import { ScreenHelpPig } from "../components/screen-help-pig";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
@@ -26,6 +27,7 @@ export default function RootLayout({
           </main>
           <Suspense fallback={null}>
             <MobileBottomNav />
+            <ScreenHelpPig />
           </Suspense>
         </div>
       </body>

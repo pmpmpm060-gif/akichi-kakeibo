@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, BarChart3, CalendarClock } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, BarChart3, CalendarClock, Bell, PiggyBank } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser } from '../lib/household-users';
@@ -32,6 +32,7 @@ function HomePageContent() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [alerts, setAlerts] = useState<string[]>([]);
 
   // シミュレーションでは、ブラウザのJSTローカル日付を使用する。
   const [daysInMonth, setDaysInMonth] = useState<number>(30);
@@ -51,12 +52,26 @@ function HomePageContent() {
       const startOfMonth = `${yearMonthStr}-01`;
       const lastDay = new Date(jstYear, now.getMonth() + 1, 0).getDate();
       const safeEndOfMonth = `${yearMonthStr}-${String(lastDay).padStart(2, '0')}`;
+      const previousDate = new Date(jstYear, now.getMonth() - 1, 1);
+      const previousMonth = `${previousDate.getFullYear()}-${String(previousDate.getMonth() + 1).padStart(2, '0')}`;
+      const previousEnd = `${previousMonth}-${String(new Date(previousDate.getFullYear(), previousDate.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
 
       const todayNum = now.getDate();
       // 日当たり目安は今日から計算するため、残り日数に今日を含める。
       const remDays = lastDay - todayNum + 1;
 
-      const [categoryResult, transactionResult, budgetResult] = await Promise.all([
+      const generateResult = await supabase.rpc('generate_recurring_transactions', {
+        target_user_id: currentUser,
+        target_month: startOfMonth,
+      });
+      if (ignore) return;
+      if (generateResult.error) {
+        setDataError(generateResult.error.message);
+        setLoading(false);
+        return;
+      }
+
+      const [categoryResult, transactionResult, budgetResult, previousTransactionResult] = await Promise.all([
         supabase.from('categories').select('*').eq('user_id', currentUser),
         supabase
           .from('transactions')
@@ -68,11 +83,12 @@ function HomePageContent() {
           target_user_id: currentUser,
           target_month: startOfMonth,
         }),
+        supabase.from('transactions').select('amount, category_id, type').eq('user_id', currentUser).gte('date', `${previousMonth}-01`).lte('date', previousEnd),
       ]);
 
       if (ignore) return;
 
-      const error = categoryResult.error || transactionResult.error || budgetResult.error;
+      const error = categoryResult.error || transactionResult.error || budgetResult.error || previousTransactionResult.error;
       if (error) {
         setDataError(error.message);
         setLoading(false);
@@ -129,6 +145,16 @@ function HomePageContent() {
           })
           .filter((item) => item.budget !== 0 || item.actual !== 0)
       );
+      const nextAlerts: string[] = [];
+      (categoryResult.data || []).filter((category) => category.type === 'expense').forEach((category) => {
+        const currentActual = (transactionResult.data || []).filter((item) => item.category_id === category.id && item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
+        const previousActual = (previousTransactionResult.data || []).filter((item) => item.category_id === category.id && item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
+        const budget = Number((budgetResult.data || []).find((item) => item.category_id === category.id)?.amount || 0);
+        if (budget > 0 && currentActual >= budget) nextAlerts.push(`${category.name}が予算を超過しています`);
+        else if (budget > 0 && currentActual >= budget * 0.8) nextAlerts.push(`${category.name}が予算の80%に達しました`);
+        if (previousActual > 0 && currentActual >= previousActual * 1.5 && currentActual - previousActual >= 3000) nextAlerts.push(`${category.name}が前月より大きく増えています`);
+      });
+      setAlerts(nextAlerts);
       setLoading(false);
     };
 
@@ -214,14 +240,18 @@ function HomePageContent() {
 
       {dataError && <DataErrorCard message={dataError} onRetry={retryFetch} />}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Link href={`/reports?user=${currentUser}`} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border-2 border-slate-800 bg-indigo-100 text-xs font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-          <BarChart3 className="h-5 w-5" />月次レポート
+      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+        <Link href={`/reports?user=${currentUser}`} className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border-2 border-slate-800 bg-indigo-100 px-1 text-center text-[10px] font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+          <BarChart3 className="h-5 w-5 shrink-0" /><span>月次レポート</span>
         </Link>
-        <Link href={`/recurring?user=${currentUser}`} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border-2 border-slate-800 bg-sky-100 text-xs font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-          <CalendarClock className="h-5 w-5" />定期取引
+        <Link href={`/recurring?user=${currentUser}`} className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border-2 border-slate-800 bg-sky-100 px-1 text-center text-[10px] font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+          <CalendarClock className="h-5 w-5 shrink-0" /><span>定期取引</span>
+        </Link>
+        <Link href={`/savings?user=${currentUser}`} className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border-2 border-slate-800 bg-emerald-100 px-1 text-center text-[10px] font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+          <PiggyBank className="h-5 w-5 shrink-0" /><span>貯金目標</span>
         </Link>
       </div>
+      {!loading && alerts.length > 0 && <section className="flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-orange-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"><h2 className="flex items-center gap-2 text-sm font-black text-orange-800"><Bell className="h-5 w-5" />家計アラート</h2>{alerts.map((message) => <p key={message} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700">・{message}</p>)}</section>}
 
       {/* 押下するとカテゴリ別の支出予算案内を展開する。 */}
       {!dataError && (

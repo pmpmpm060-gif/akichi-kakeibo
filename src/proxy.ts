@@ -64,5 +64,6 @@ export const config = {
     '/categories/:path*',
     '/recurring/:path*',
     '/reports/:path*',
+    '/savings/:path*',
   ],
 };

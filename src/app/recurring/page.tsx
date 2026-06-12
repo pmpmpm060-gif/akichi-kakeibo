@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, CalendarClock, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Edit2, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { DataErrorCard } from '../../components/data-error-card';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
@@ -34,6 +34,7 @@ function RecurringPageContent() {
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [editingItem, setEditingItem] = useState<RecurringWithCategory | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -153,6 +154,35 @@ function RecurringPageContent() {
       alert('削除に失敗しました：' + error.message);
     } else {
       setItems((current) => current.filter((target) => target.id !== item.id));
+      if (editingItem?.id === item.id) setEditingItem(null);
+    }
+    setMutatingId(null);
+  };
+
+  const handleUpdate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingItem || mutatingId) return;
+    if (!Number.isSafeInteger(editingItem.amount) || editingItem.amount <= 0 || editingItem.day_of_month < 1 || editingItem.day_of_month > 31) {
+      alert('金額と登録日を確認してください。');
+      return;
+    }
+    if (editingItem.end_month && editingItem.end_month < editingItem.start_month) {
+      alert('終了月は開始月以降を指定してください。');
+      return;
+    }
+    setMutatingId(editingItem.id);
+    const { data, error } = await supabase.from('recurring_transactions').update({
+      category_id: editingItem.category_id,
+      amount: editingItem.amount,
+      description: editingItem.description.trim(),
+      day_of_month: editingItem.day_of_month,
+      start_month: editingItem.start_month,
+      end_month: editingItem.end_month,
+    }).eq('id', editingItem.id).select('*, categories(name, icon, type)').single();
+    if (error) alert('定期取引の更新に失敗しました：' + error.message);
+    else {
+      setItems((current) => current.map((item) => item.id === data.id ? data as RecurringWithCategory : item));
+      setEditingItem(null);
     }
     setMutatingId(null);
   };
@@ -218,9 +248,7 @@ function RecurringPageContent() {
                 <p className="text-xs font-bold text-slate-500">毎月{item.day_of_month}日・¥{item.amount.toLocaleString()}</p>
                 <p className="text-[10px] font-bold text-slate-400">{item.start_month.slice(0, 7)} ～ {item.end_month?.slice(0, 7) || '終了なし'}</p>
               </div>
-              <button onClick={() => handleDelete(item)} disabled={mutatingId !== null} aria-label="定期取引を削除" className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-500 disabled:opacity-50">
-                {mutatingId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              </button>
+              <button onClick={() => setEditingItem(item)} disabled={mutatingId !== null} aria-label="定期取引を編集" className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-600 disabled:opacity-50"><Edit2 className="h-4 w-4" /></button>
             </div>
             <button onClick={() => handleToggle(item)} disabled={mutatingId !== null} className={`min-h-11 rounded-xl border-2 border-slate-800 text-xs font-black ${item.enabled ? 'bg-emerald-200' : 'bg-slate-200'}`}>
               {item.enabled ? '自動登録：有効' : '自動登録：停止中'}
@@ -228,6 +256,22 @@ function RecurringPageContent() {
           </article>
         ))}
       </section>
+      {editingItem && <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="mobile-sheet w-full max-w-md overflow-hidden rounded-t-3xl border-4 border-slate-800 bg-white sm:rounded-3xl">
+          <div className="flex items-center justify-between border-b-2 border-slate-800 bg-indigo-100 p-4"><h2 className="font-black">定期取引を編集</h2><button onClick={() => setEditingItem(null)} className="flex min-h-11 min-w-11 items-center justify-center"><X className="h-5 w-5" /></button></div>
+          <form onSubmit={handleUpdate} className="flex max-h-[calc(90dvh-76px)] flex-col gap-3 overflow-y-auto p-4">
+            <select value={editingItem.category_id} onChange={(event) => setEditingItem({ ...editingItem, category_id: event.target.value })} className="min-h-12 rounded-xl border-2 border-slate-800 bg-white px-3 text-base">{categories.map((category) => <option key={category.id} value={category.id}>{category.icon} {category.name}</option>)}</select>
+            <input type="number" min="1" step="1" value={editingItem.amount} onChange={(event) => setEditingItem({ ...editingItem, amount: Number(event.target.value) })} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
+            <input value={editingItem.description} onChange={(event) => setEditingItem({ ...editingItem, description: event.target.value })} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
+            <input type="number" min="1" max="31" value={editingItem.day_of_month} onChange={(event) => setEditingItem({ ...editingItem, day_of_month: Number(event.target.value) })} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
+            <label className="text-xs font-black">開始月<input type="month" value={editingItem.start_month.slice(0, 7)} onChange={(event) => setEditingItem({ ...editingItem, start_month: `${event.target.value}-01` })} className="mobile-date-input mt-1 min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>
+            <label className="text-xs font-black">終了月（任意）<input type="month" value={editingItem.end_month?.slice(0, 7) || ''} onChange={(event) => setEditingItem({ ...editingItem, end_month: event.target.value ? `${event.target.value}-01` : null })} className="mobile-date-input mt-1 min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>
+            <p className="text-xs font-bold text-slate-500">変更内容は次回生成分から反映され、生成済みの記録は変更されません。</p>
+            <button disabled={mutatingId !== null} className="min-h-12 rounded-xl border-2 border-slate-800 bg-slate-900 text-sm font-black text-white">変更を保存</button>
+            <button type="button" onClick={() => handleDelete(editingItem)} disabled={mutatingId !== null} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-rose-300 bg-rose-50 text-sm font-black text-rose-600"><Trash2 className="h-4 w-4" />この定期取引を削除</button>
+          </form>
+        </div>
+      </div>}
     </div>
   );
 }

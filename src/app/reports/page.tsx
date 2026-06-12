@@ -1,9 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, ArrowDownRight, ArrowUpRight, BarChart3, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowLeft, ArrowDownRight, ArrowUpRight, BarChart3, ChevronLeft, ChevronRight, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
 import { DataErrorCard } from '../../components/data-error-card';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
@@ -23,14 +23,14 @@ function ReportsPageContent() {
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [reportMode, setReportMode] = useState<'monthly' | 'yearly'>('monthly');
 
-  const now = useMemo(() => new Date(), []);
-  const currentMonth = monthKey(now);
-  const previousDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const currentMonth = monthKey(selectedDate);
+  const previousDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1);
   const previousMonth = monthKey(previousDate);
-  const firstReportDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  const reportStart = `${monthKey(firstReportDate)}-01`;
-  const reportEnd = `${currentMonth}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+  const reportStart = `${selectedDate.getFullYear() - 1}-12-01`;
+  const reportEnd = `${selectedDate.getFullYear()}-12-31`;
 
   useEffect(() => {
     let ignore = false;
@@ -70,8 +70,8 @@ function ReportsPageContent() {
     .filter((category) => category.current > 0 || category.previous > 0)
     .sort((left, right) => right.current - left.current);
 
-  const monthlyTrend = Array.from({ length: 6 }, (_, index) => {
-    const date = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+  const monthlyTrend = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(selectedDate.getFullYear(), index, 1);
     const key = monthKey(date);
     const targets = transactions.filter((transaction) => transaction.date.startsWith(key));
     return {
@@ -82,6 +82,18 @@ function ReportsPageContent() {
     };
   });
   const maxTrendAmount = Math.max(1, ...monthlyTrend.flatMap((month) => [month.income, month.expense]));
+  const yearlyIncome = monthlyTrend.reduce((sum, month) => sum + month.income, 0);
+  const yearlyExpense = monthlyTrend.reduce((sum, month) => sum + month.expense, 0);
+  const yearlyCategoryRanking = categories.filter((category) => category.type === 'expense').map((category) => ({
+    ...category,
+    total: transactions.filter((transaction) => transaction.date.startsWith(String(selectedDate.getFullYear())) && transaction.category_id === category.id && transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0),
+  })).filter((category) => category.total > 0).sort((left, right) => right.total - left.total);
+
+  const changeMonth = (increment: number) => {
+    setLoading(true);
+    setDataError(null);
+    setSelectedDate((current) => new Date(current.getFullYear(), current.getMonth() + increment, 1));
+  };
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
@@ -89,12 +101,21 @@ function ReportsPageContent() {
         <Link href={`/?user=${currentUser}`} className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div><p className="text-xs font-black text-slate-400">{currentMonth.replace('-', '年')}月</p><h1 className="text-2xl font-black">月次レポート</h1></div>
+        <div><p className="text-xs font-black text-slate-400">{currentMonth.replace('-', '年')}月</p><h1 className="text-2xl font-black">家計レポート</h1></div>
       </header>
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border-2 border-slate-800 bg-slate-100 p-1">
+        <button onClick={() => setReportMode('monthly')} className={`min-h-11 rounded-xl text-sm font-black ${reportMode === 'monthly' ? 'bg-white shadow' : 'text-slate-500'}`}>月別</button>
+        <button onClick={() => setReportMode('yearly')} className={`min-h-11 rounded-xl text-sm font-black ${reportMode === 'yearly' ? 'bg-white shadow' : 'text-slate-500'}`}>年間</button>
+      </div>
+      <div className="flex items-center justify-between rounded-2xl border-2 border-slate-800 bg-indigo-50 p-2">
+        <button onClick={() => changeMonth(reportMode === 'monthly' ? -1 : -12)} className="flex min-h-11 min-w-11 items-center justify-center"><ChevronLeft /></button>
+        <span className="font-black">{reportMode === 'monthly' ? `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月` : `${selectedDate.getFullYear()}年`}</span>
+        <button onClick={() => changeMonth(reportMode === 'monthly' ? 1 : 12)} className="flex min-h-11 min-w-11 items-center justify-center"><ChevronRight /></button>
+      </div>
 
       {loading ? <Loader2 className="mx-auto h-8 w-8 animate-spin text-slate-400" /> : dataError ? (
         <DataErrorCard message={dataError} onRetry={() => { setLoading(true); setDataError(null); setRetryKey((current) => current + 1); }} />
-      ) : <>
+      ) : reportMode === 'monthly' ? <>
         <section className="grid grid-cols-2 gap-3">
           <div className="rounded-2xl border-2 border-slate-800 bg-emerald-50 p-3 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
             <p className="flex items-center gap-1 text-xs font-black text-emerald-700"><ArrowUpRight className="h-4 w-4" />今月の収入</p>
@@ -113,7 +134,7 @@ function ReportsPageContent() {
         </section>
 
         <section className="flex flex-col gap-3">
-          <h2 className="flex items-center gap-2 text-sm font-black"><BarChart3 className="h-5 w-5" />過去6か月の推移</h2>
+          <h2 className="flex items-center gap-2 text-sm font-black"><BarChart3 className="h-5 w-5" />{selectedDate.getFullYear()}年の推移</h2>
           <div className="flex h-48 items-end justify-between gap-2 rounded-3xl border-2 border-slate-800 bg-white p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
             {monthlyTrend.map((month) => (
               <div key={month.key} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
@@ -137,6 +158,13 @@ function ReportsPageContent() {
             </article>
           ))}
         </section>
+      </> : <>
+        <section className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border-2 border-slate-800 bg-emerald-50 p-3"><p className="text-xs font-black text-emerald-700">年間収入</p><p className="mt-2 text-lg font-black">¥{yearlyIncome.toLocaleString()}</p></div>
+          <div className="rounded-2xl border-2 border-slate-800 bg-rose-50 p-3"><p className="text-xs font-black text-rose-600">年間支出</p><p className="mt-2 text-lg font-black">¥{yearlyExpense.toLocaleString()}</p></div>
+        </section>
+        <section className="rounded-3xl border-2 border-slate-800 bg-amber-50 p-4"><p className="text-sm font-black">月平均支出</p><p className="mt-2 text-2xl font-black">¥{Math.round(yearlyExpense / 12).toLocaleString()}</p><p className="text-xs font-bold text-slate-500">年間収支 ¥{(yearlyIncome - yearlyExpense).toLocaleString()}</p></section>
+        <section className="flex flex-col gap-3"><h2 className="text-sm font-black">年間カテゴリランキング</h2>{yearlyCategoryRanking.map((category, index) => <article key={category.id} className="flex justify-between rounded-2xl border-2 border-slate-800 bg-white p-3"><p className="text-sm font-black">{index + 1}. {category.icon} {category.name}</p><p className="text-sm font-black text-rose-600">¥{category.total.toLocaleString()}</p></article>)}</section>
       </>}
     </div>
   );

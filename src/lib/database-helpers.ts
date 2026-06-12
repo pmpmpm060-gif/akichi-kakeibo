@@ -4,6 +4,8 @@ export type Category = Database['public']['Tables']['categories']['Row'];
 export type Budget = Database['public']['Tables']['budgets']['Row'];
 export type Transaction = Database['public']['Tables']['transactions']['Row'];
 export type RecurringTransaction = Database['public']['Tables']['recurring_transactions']['Row'];
+export type SavingsGoal = Database['public']['Tables']['savings_goals']['Row'];
+export type SavingsContribution = Database['public']['Tables']['savings_contributions']['Row'];
 export type EffectiveBudget =
   Database['public']['Functions']['get_effective_budgets']['Returns'][number];
 
