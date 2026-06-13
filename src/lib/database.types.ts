@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_security_events: {
+        Row: {
+          action: string
+          actor_user_id: string
+          created_at: string
+          id: string
+          target_user_id: string
+        }
+        Insert: {
+          action: string
+          actor_user_id: string
+          created_at?: string
+          id?: string
+          target_user_id: string
+        }
+        Update: {
+          action?: string
+          actor_user_id?: string
+          created_at?: string
+          id?: string
+          target_user_id?: string
+        }
+        Relationships: []
+      }
       ai_household_diagnoses: {
         Row: {
           actions: Json
@@ -767,7 +791,10 @@ export type Database = {
         Args: { target_household_id: string; target_user_id: string }
         Returns: boolean
       }
-      consume_ai_diagnosis_quota: { Args: never; Returns: boolean }
+      consume_ai_diagnosis_quota: {
+        Args: { target_month: string; target_profile_id: string }
+        Returns: string
+      }
       create_transaction_with_tags: {
         Args: {
           target_amount: number

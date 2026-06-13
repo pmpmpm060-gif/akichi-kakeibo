@@ -11,6 +11,30 @@ export async function proxy(req: NextRequest) {
       headers: req.headers,
     },
   });
+  const protectedResponse = (response: NextResponse) => {
+    response.headers.set('Cache-Control', 'private, no-store, max-age=0');
+    response.headers.set('Pragma', 'no-cache');
+    return response;
+  };
+  const redirect = (pathname: string, update?: (url: URL) => void) => {
+    const url = req.nextUrl.clone();
+    url.pathname = pathname;
+    update?.(url);
+    const redirectResponse = NextResponse.redirect(url);
+    // getUser()中に更新されたセッションCookieを、画面遷移時も失わないよう引き継ぐ。
+    res.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return protectedResponse(redirectResponse);
+  };
+  const serviceUnavailable = () => protectedResponse(new NextResponse(
+    '認証状態を確認できませんでした。しばらくしてから画面を再読み込みしてください。',
+    {
+      status: 503,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Retry-After': '10',
+      },
+    }
+  ));
 
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -44,42 +68,39 @@ export async function proxy(req: NextRequest) {
 
   // getUser()はSupabase側でアクセストークンを検証する。
   // Cookieの内容を信頼するgetSession()だけでは保護ルートの認証確認として不十分。
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
 
   if (!user) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
+    return redirect('/login');
   }
+  if (authError) return serviceUnavailable();
 
-  const { data: membership } = await supabase
+  const { data: membership, error: membershipError } = await supabase
     .from('household_members')
     .select('household_id')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  const { data: approved } = await supabase.rpc('is_approved_user');
+  const { data: approved, error: approvalError } = await supabase.rpc('is_approved_user');
+  if (membershipError || approvalError) return serviceUnavailable();
   const isApprovalPage = req.nextUrl.pathname === '/approval-pending';
 
   if (!approved && !isApprovalPage) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/approval-pending';
-    return NextResponse.redirect(url);
+    return redirect('/approval-pending');
   }
   if (approved && isApprovalPage) {
-    const url = req.nextUrl.clone();
-    url.pathname = membership ? '/' : '/setup';
-    return NextResponse.redirect(url);
+    return redirect(membership ? '/' : '/setup');
   }
   if (!membership && req.nextUrl.pathname !== '/setup' && !isApprovalPage) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/setup';
-    return NextResponse.redirect(url);
+    return redirect('/setup');
   }
   if (membership && req.nextUrl.pathname === '/setup') {
-    const url = req.nextUrl.clone();
-    url.pathname = '/';
-    return NextResponse.redirect(url);
+    return redirect('/');
+  }
+  if (req.nextUrl.pathname.startsWith('/admin/approvals')) {
+    const { data: isAdmin, error: adminError } = await supabase.rpc('is_app_admin');
+    if (adminError) return serviceUnavailable();
+    if (!isAdmin) return redirect('/');
   }
   if (
     membership
@@ -87,15 +108,14 @@ export async function proxy(req: NextRequest) {
     && req.nextUrl.pathname !== '/admin/approvals'
     && !isApprovalPage
   ) {
-    const { data: currentProfileId } = await supabase.rpc('current_profile_id');
+    const { data: currentProfileId, error: profileError } = await supabase.rpc('current_profile_id');
+    if (profileError) return serviceUnavailable();
     if (currentProfileId) {
-      const url = req.nextUrl.clone();
-      url.searchParams.set('user', currentProfileId);
-      return NextResponse.redirect(url);
+      return redirect(req.nextUrl.pathname, (url) => url.searchParams.set('user', currentProfileId));
     }
   }
 
-  return res;
+  return protectedResponse(res);
 }
 
 export const config = {

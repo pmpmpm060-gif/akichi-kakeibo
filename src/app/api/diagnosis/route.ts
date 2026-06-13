@@ -19,6 +19,16 @@ const MAX_REQUEST_BYTES = 10_000;
 const PAGE_SIZE = 1000;
 class RequestBodyTooLargeError extends Error {}
 
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      'Cache-Control': 'private, no-store, max-age=0',
+      'Pragma': 'no-cache',
+    },
+  });
+}
+
 const SAFE_STAGE_ERRORS: Record<string, { message: string; status: number }> = {
   'load-aggregates': {
     message: '診断用データの集計に失敗しました。画面を再読み込みしてから、もう一度お試しください。',
@@ -165,10 +175,10 @@ export async function POST(request: Request) {
     const requestOrigin = request.headers.get('origin');
     const expectedOrigin = new URL(request.url).origin;
     if (requestOrigin !== expectedOrigin) {
-      return NextResponse.json({ error: '許可されていないリクエストです。' }, { status: 403 });
+      return jsonResponse({ error: '許可されていないリクエストです。' }, 403);
     }
     if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
-      return NextResponse.json({ error: '入力形式が不正です。' }, { status: 415 });
+      return jsonResponse({ error: '入力形式が不正です。' }, 415);
     }
 
     const cookieStore = await cookies();
@@ -178,12 +188,13 @@ export async function POST(request: Request) {
       { cookies: { getAll: () => cookieStore.getAll(), setAll: (items) => items.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } }
     );
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: '認証が必要です。' }, { status: 401 });
+    if (!user) return jsonResponse({ error: '認証が必要です。' }, 401);
     const { data: approved, error: approvalError } = await supabase.rpc('is_approved_user');
-    if (approvalError || !approved) return NextResponse.json({ error: '利用承認が必要です。' }, { status: 403 });
+    if (approvalError) throw approvalError;
+    if (!approved) return jsonResponse({ error: '利用承認が必要です。' }, 403);
     const contentLength = Number(request.headers.get('content-length') || 0);
     if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > MAX_REQUEST_BYTES) {
-      return NextResponse.json({ error: '入力内容が大きすぎます。' }, { status: 413 });
+      return jsonResponse({ error: '入力内容が大きすぎます。' }, 413);
     }
 
     stage = 'validate-input';
@@ -192,8 +203,8 @@ export async function POST(request: Request) {
       body = await readJsonBody(request);
     } catch (error) {
       return error instanceof RequestBodyTooLargeError
-        ? NextResponse.json({ error: '入力内容が大きすぎます。' }, { status: 413 })
-        : NextResponse.json({ error: '入力内容が不正です。' }, { status: 400 });
+        ? jsonResponse({ error: '入力内容が大きすぎます。' }, 413)
+        : jsonResponse({ error: '入力内容が不正です。' }, 400);
     }
     const targetUserId = body?.targetUserId;
     const targetMonth = body?.targetMonth;
@@ -203,20 +214,26 @@ export async function POST(request: Request) {
       || !MONTH_PATTERN.test(targetMonth)
       || !isSupportedDiagnosisMonth(targetMonth)
     ) {
-      return NextResponse.json({ error: '入力内容が不正です。' }, { status: 400 });
+      return jsonResponse({ error: '入力内容が不正です。' }, 400);
     }
     stage = 'validate-profile';
     const { data: profile } = await supabase.from('household_profiles').select('profile_id').eq('profile_id', targetUserId).maybeSingle();
-    if (!profile) return NextResponse.json({ error: '対象ユーザーを確認できません。' }, { status: 403 });
+    if (!profile) return jsonResponse({ error: '対象ユーザーを確認できません。' }, 403);
     const { data: ownProfileId } = await supabase.rpc('current_profile_id');
-    if (ownProfileId !== targetUserId) return NextResponse.json({ error: '参照中のプロフィールはAI診断できません。' }, { status: 403 });
+    if (ownProfileId !== targetUserId) return jsonResponse({ error: '参照中のプロフィールはAI診断できません。' }, 403);
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: 'AI診断を利用できる状態ではありません。' }, { status: 503 });
+    if (!apiKey) return jsonResponse({ error: 'AI診断を利用できる状態ではありません。' }, 503);
     stage = 'check-quota';
-    const { data: quotaAvailable, error: quotaError } = await supabase.rpc('consume_ai_diagnosis_quota');
+    const { data: quotaStatus, error: quotaError } = await supabase.rpc('consume_ai_diagnosis_quota', {
+      target_profile_id: targetUserId,
+      target_month: `${targetMonth}-01`,
+    });
     if (quotaError) throw quotaError;
-    if (!quotaAvailable) {
-      return NextResponse.json({ error: 'AI診断の実行回数が多すぎます。時間を空けてからお試しください。' }, { status: 429 });
+    if (quotaStatus === 'cooldown') {
+      return jsonResponse({ error: '同じ月のAI診断を実行した直後です。3分ほど待ってからお試しください。' }, 429);
+    }
+    if (quotaStatus !== 'allowed') {
+      return jsonResponse({ error: 'AI診断の実行回数が多すぎます。時間を空けてからお試しください。' }, 429);
     }
 
     const monthStart = `${targetMonth}-01`;
@@ -329,16 +346,16 @@ export async function POST(request: Request) {
       recommended_budgets: diagnosis.recommendedBudgets as Json,
     }).select().single();
     if (saveError) throw saveError;
-    return NextResponse.json({ diagnosis: saved }, { headers: { 'Cache-Control': 'no-store' } });
+    return jsonResponse({ diagnosis: saved });
   } catch (error: unknown) {
     const details = error instanceof Error
       ? { name: error.name, message: error.message, cause: error.cause }
       : { value: String(error) };
     console.error(`AI diagnosis route error [stage=${stage}, elapsedMs=${Date.now() - startedAt}]:`, details);
     const safeError = SAFE_STAGE_ERRORS[stage];
-    return NextResponse.json(
+    return jsonResponse(
       { error: safeError?.message || 'AI診断に失敗しました。しばらくしてからもう一度お試しください。' },
-      { status: safeError?.status || 500, headers: { 'Cache-Control': 'no-store' } }
+      safeError?.status || 500
     );
   }
 }
