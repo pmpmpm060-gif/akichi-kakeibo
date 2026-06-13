@@ -12,7 +12,7 @@ import { useHorizontalSwipe } from '../../components/mobile-ui';
 import { AppHeader } from '../../components/mobile-ui';
 import { userErrorMessage } from '../../lib/user-errors';
 
-type ReportTransaction = Pick<Transaction, 'id' | 'amount' | 'category_id' | 'date' | 'type'>;
+type ReportTransaction = Pick<Transaction, 'id' | 'amount' | 'category_id' | 'date' | 'type' | 'recurring_transaction_id'>;
 type TagRow = Database['public']['Tables']['tags']['Row'];
 type SavedFilter = Database['public']['Tables']['saved_filters']['Row'];
 type AiDiagnosis = Database['public']['Tables']['ai_household_diagnoses']['Row'];
@@ -23,7 +23,7 @@ async function fetchReportTransactions(currentUser: string, reportStart: string,
   const rows: ReportTransaction[] = [];
   for (let offset = 0; ; offset += PAGE_SIZE) {
     const result = await supabase.from('transactions')
-      .select('id, amount, category_id, date, type')
+      .select('id, amount, category_id, date, type, recurring_transaction_id')
       .eq('user_id', currentUser)
       .gte('date', reportStart)
       .lte('date', reportEnd)
@@ -52,6 +52,20 @@ function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function compactYen(amount: number) {
+  if (amount >= 10_000) return `${Math.round(amount / 10_000)}万`;
+  return amount.toLocaleString();
+}
+
+function chartLinePath(points: { x: number; y: number }[]) {
+  return points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
+}
+
+function chartAreaPath(points: { x: number; y: number }[], bottom: number) {
+  if (points.length === 0) return '';
+  return `${chartLinePath(points)} L ${points.at(-1)!.x} ${bottom} L ${points[0].x} ${bottom} Z`;
+}
+
 function ReportsPageContent() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
@@ -72,6 +86,7 @@ function ReportsPageContent() {
   const [selectedDiagnosisId, setSelectedDiagnosisId] = useState<string | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosisError, setDiagnosisError] = useState<string | null>(null);
+  const [includeFixedExpenses, setIncludeFixedExpenses] = useState(false);
 
   const currentMonth = monthKey(selectedDate);
   const diagnosisCurrentMonth = monthKey(new Date());
@@ -132,12 +147,23 @@ function ReportsPageContent() {
   const previousExpense = previousTransactions.filter((transaction) => transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0);
   const expenseDifference = currentExpense - previousExpense;
   const expenseChangePercent = previousExpense > 0 ? Math.round((expenseDifference / previousExpense) * 100) : null;
+  const rankingTransactions = includeFixedExpenses
+    ? transactions
+    : transactions.filter((transaction) => transaction.recurring_transaction_id === null);
+  const rankingMonthTransactions = rankingTransactions.filter((transaction) => transaction.date.startsWith(currentMonth));
+  const rankingPreviousTransactions = rankingTransactions.filter((transaction) => transaction.date.startsWith(previousMonth));
+  const monthlyFixedExpense = monthTransactions
+    .filter((transaction) => transaction.type === 'expense' && transaction.recurring_transaction_id !== null)
+    .reduce((sum, transaction) => sum + transaction.amount, 0);
+  const yearlyFixedExpense = transactions
+    .filter((transaction) => transaction.date.startsWith(String(selectedDate.getFullYear())) && transaction.type === 'expense' && transaction.recurring_transaction_id !== null)
+    .reduce((sum, transaction) => sum + transaction.amount, 0);
 
   const categoryRanking = categories
     .filter((category) => category.type === 'expense')
     .map((category) => {
-      const current = monthTransactions.filter((transaction) => transaction.category_id === category.id && transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0);
-      const previous = previousTransactions.filter((transaction) => transaction.category_id === category.id && transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0);
+      const current = rankingMonthTransactions.filter((transaction) => transaction.category_id === category.id && transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0);
+      const previous = rankingPreviousTransactions.filter((transaction) => transaction.category_id === category.id && transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0);
       return { ...category, current, previous, difference: current - previous };
     })
     .filter((category) => category.current > 0 || category.previous > 0)
@@ -157,9 +183,20 @@ function ReportsPageContent() {
   const maxTrendAmount = Math.max(1, ...monthlyTrend.flatMap((month) => [month.income, month.expense]));
   const yearlyIncome = monthlyTrend.reduce((sum, month) => sum + month.income, 0);
   const yearlyExpense = monthlyTrend.reduce((sum, month) => sum + month.expense, 0);
+  const activeTrend = monthlyTrend.find((month) => month.key === selectedTrendKey)
+    || monthlyTrend.find((month) => month.key === currentMonth)
+    || monthlyTrend[0];
+  const chartWidth = 360;
+  const chartHeight = 176;
+  const chartTop = 14;
+  const chartBottom = 158;
+  const chartX = (index: number) => 12 + index * ((chartWidth - 24) / 11);
+  const chartY = (amount: number) => chartTop + (1 - amount / maxTrendAmount) * (chartBottom - chartTop);
+  const incomePoints = monthlyTrend.map((month, index) => ({ x: chartX(index), y: chartY(month.income) }));
+  const expensePoints = monthlyTrend.map((month, index) => ({ x: chartX(index), y: chartY(month.expense) }));
   const yearlyCategoryRanking = categories.filter((category) => category.type === 'expense').map((category) => ({
     ...category,
-    total: transactions.filter((transaction) => transaction.date.startsWith(String(selectedDate.getFullYear())) && transaction.category_id === category.id && transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0),
+    total: rankingTransactions.filter((transaction) => transaction.date.startsWith(String(selectedDate.getFullYear())) && transaction.category_id === category.id && transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0),
   })).filter((category) => category.total > 0).sort((left, right) => right.total - left.total);
   const tagRanking = tags.map((tag) => ({
     ...tag,
@@ -175,7 +212,6 @@ function ReportsPageContent() {
     () => changeMonth(reportMode === 'monthly' ? -1 : -12),
     () => changeMonth(reportMode === 'monthly' ? 1 : 12)
   );
-  const selectedTrend = monthlyTrend.find((month) => month.key === selectedTrendKey);
   const saveReview = async () => {
     setSavingReview(true);
     try {
@@ -290,26 +326,47 @@ function ReportsPageContent() {
         </section>
 
         <section className="flex flex-col gap-3">
-          <h2 className="flex items-center gap-2 text-sm font-black"><BarChart3 className="h-5 w-5" />{selectedDate.getFullYear()}年の推移</h2>
-          <div className="flex h-48 items-end justify-between gap-2 rounded-3xl border-2 border-slate-800 bg-white p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-            {monthlyTrend.map((month) => (
-              <button type="button" onClick={() => setSelectedTrendKey(month.key)} key={month.key} className={`flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1 rounded-md ${selectedTrendKey === month.key ? 'bg-amber-100' : ''}`}>
-                <div className="flex h-full w-full items-end justify-center gap-0.5">
-                  <div title={`収入 ¥${month.income.toLocaleString()}`} className="w-2.5 rounded-t bg-emerald-400" style={{ height: `${Math.max(2, (month.income / maxTrendAmount) * 100)}%` }} />
-                  <div title={`支出 ¥${month.expense.toLocaleString()}`} className="w-2.5 rounded-t bg-rose-400" style={{ height: `${Math.max(2, (month.expense / maxTrendAmount) * 100)}%` }} />
-                </div>
-                <span className="text-[10px] font-black text-slate-500">{month.label}</span>
-              </button>
-            ))}
+          <div className="flex items-end justify-between gap-2"><div className="min-w-0"><h2 className="flex items-center gap-2 text-sm font-black"><BarChart3 className="h-5 w-5 text-indigo-500" />{selectedDate.getFullYear()}年の推移</h2><p className="mt-1 text-[10px] font-bold text-slate-500">月をタップすると収支の詳細を確認できます</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${activeTrend.income - activeTrend.expense >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{activeTrend.label} {activeTrend.income - activeTrend.expense >= 0 ? '+' : '-'}¥{compactYen(Math.abs(activeTrend.income - activeTrend.expense))}</span></div>
+          <div className="overflow-hidden rounded-3xl border-2 border-slate-800 bg-slate-950 shadow-[5px_5px_0px_0px_rgba(15,23,42,1)]">
+            <div className="grid grid-cols-3 gap-px bg-white/10">
+              <div className="bg-slate-950 p-3"><p className="text-[10px] font-black text-emerald-300">収入</p><p className="mt-1 text-sm font-black text-white">¥{compactYen(activeTrend.income)}</p></div>
+              <div className="bg-slate-950 p-3"><p className="text-[10px] font-black text-rose-300">支出</p><p className="mt-1 text-sm font-black text-white">¥{compactYen(activeTrend.expense)}</p></div>
+              <div className="bg-slate-950 p-3"><p className="text-[10px] font-black text-indigo-300">収支</p><p className={`mt-1 text-sm font-black ${activeTrend.income - activeTrend.expense >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{activeTrend.income - activeTrend.expense >= 0 ? '+' : '-'}¥{compactYen(Math.abs(activeTrend.income - activeTrend.expense))}</p></div>
+            </div>
+            <div className="relative px-2 pt-3">
+              <span className="absolute left-4 top-4 z-10 rounded-full bg-white/10 px-2 py-1 text-[9px] font-black text-slate-300">最大 ¥{compactYen(maxTrendAmount)}</span>
+              <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${selectedDate.getFullYear()}年の収入と支出の推移`} className="h-52 w-full overflow-visible">
+                <defs>
+                  <linearGradient id="incomeArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity="0.38" /><stop offset="100%" stopColor="#34d399" stopOpacity="0" /></linearGradient>
+                  <linearGradient id="expenseArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fb7185" stopOpacity="0.34" /><stop offset="100%" stopColor="#fb7185" stopOpacity="0" /></linearGradient>
+                </defs>
+                {[0, 1, 2, 3].map((line) => <line key={line} x1="12" x2="348" y1={chartTop + line * 48} y2={chartTop + line * 48} stroke="rgba(255,255,255,0.09)" strokeDasharray="3 5" />)}
+                <path d={chartAreaPath(incomePoints, chartBottom)} fill="url(#incomeArea)" />
+                <path d={chartAreaPath(expensePoints, chartBottom)} fill="url(#expenseArea)" />
+                <path d={chartLinePath(incomePoints)} fill="none" stroke="#34d399" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={chartLinePath(expensePoints)} fill="none" stroke="#fb7185" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                {monthlyTrend.map((month, index) => {
+                  const active = month.key === activeTrend.key;
+                  return <g key={month.key} onClick={() => setSelectedTrendKey(month.key)} className="cursor-pointer">
+                    <rect x={chartX(index) - 13} y="0" width="26" height={chartHeight} fill="transparent" />
+                    {active && <line x1={chartX(index)} x2={chartX(index)} y1={chartTop} y2={chartBottom} stroke="rgba(255,255,255,0.35)" strokeDasharray="3 4" />}
+                    <circle cx={chartX(index)} cy={incomePoints[index].y} r={active ? 5 : 3} fill="#34d399" stroke="#0f172a" strokeWidth="2" />
+                    <circle cx={chartX(index)} cy={expensePoints[index].y} r={active ? 5 : 3} fill="#fb7185" stroke="#0f172a" strokeWidth="2" />
+                  </g>;
+                })}
+              </svg>
+            </div>
+            <div className="grid grid-cols-12 border-t border-white/10 px-2 pb-2 pt-1">
+              {monthlyTrend.map((month) => <button type="button" onClick={() => setSelectedTrendKey(month.key)} key={month.key} aria-label={`${month.label}を表示`} className={`min-h-8 rounded-lg text-[9px] font-black ${month.key === activeTrend.key ? 'bg-white text-slate-900' : 'text-slate-400'}`}>{month.label.replace('月', '')}</button>)}
+            </div>
+            <div className="flex items-center justify-center gap-5 border-t border-white/10 py-3 text-[10px] font-black text-slate-300"><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />収入</span><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-rose-400" />支出</span></div>
           </div>
-          {selectedTrend && <p className="rounded-xl bg-indigo-50 p-3 text-center text-xs font-black">{selectedTrend.label}：収入 ¥{selectedTrend.income.toLocaleString()} ／ 支出 ¥{selectedTrend.expense.toLocaleString()}</p>}
-          <p className="text-center text-[10px] font-bold text-slate-500"><span className="text-emerald-600">■ 収入</span>　<span className="text-rose-500">■ 支出</span></p>
         </section>
         {tagRanking.length > 0 && <section className="flex flex-col gap-3"><h2 className="flex items-center gap-2 text-sm font-black"><Tag className="h-5 w-5" />タグ別支出</h2>{tagRanking.map((tag) => <article key={tag.id} className="flex justify-between rounded-2xl border-2 border-slate-800 bg-white p-3"><p className="text-sm font-black"># {tag.name}</p><p className="text-sm font-black text-rose-600">¥{tag.total.toLocaleString()}</p></article>)}</section>}
         <section className="flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-amber-50 p-4"><h2 className="text-sm font-black">今月の振り返り</h2><textarea value={monthlyReview} onChange={(event) => setMonthlyReview(event.target.value)} rows={5} placeholder="今月よかったこと、来月気を付けたいことなど" className="rounded-xl border-2 border-slate-800 p-3 text-base" /><button onClick={saveReview} disabled={savingReview} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-amber-300 text-sm font-black disabled:opacity-50"><Save className="h-5 w-5" />{savingReview ? '保存中...' : '振り返りを保存'}</button></section>
 
         <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-black">カテゴリ別支出ランキング</h2>
+          <div className="flex items-center justify-between gap-2"><div><h2 className="text-sm font-black">{includeFixedExpenses ? 'カテゴリ別支出ランキング' : '見直せる支出ランキング'}</h2><p className="text-[10px] font-bold text-slate-500">{includeFixedExpenses ? '定期取引から生成された固定費を含みます' : `固定費 ¥${monthlyFixedExpense.toLocaleString()} を除外中`}</p></div><button type="button" onClick={() => setIncludeFixedExpenses((current) => !current)} className="min-h-11 shrink-0 rounded-xl border-2 border-slate-800 bg-sky-100 px-3 text-xs font-black">{includeFixedExpenses ? '固定費を除く' : '全支出を見る'}</button></div>
           {categoryRanking.length === 0 ? <p className="rounded-2xl border-2 border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-400">比較できる支出はありません。</p> : categoryRanking.map((category, index) => (
             <article key={category.id} className="flex items-center justify-between gap-3 rounded-2xl border-2 border-slate-800 bg-white p-3 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
               <div className="min-w-0"><p className="truncate text-sm font-black">{index + 1}. {category.icon} {category.name}</p><p className={`text-[10px] font-black ${category.difference > 0 ? 'text-orange-600' : 'text-sky-600'}`}>前月より {category.difference > 0 ? '+' : category.difference < 0 ? '-' : ''}¥{Math.abs(category.difference).toLocaleString()}</p></div>
@@ -323,7 +380,7 @@ function ReportsPageContent() {
           <div className="rounded-2xl border-2 border-slate-800 bg-rose-50 p-3"><p className="text-xs font-black text-rose-600">年間支出</p><p className="mt-2 text-lg font-black">¥{yearlyExpense.toLocaleString()}</p></div>
         </section>
         <section className="rounded-3xl border-2 border-slate-800 bg-amber-50 p-4"><p className="text-sm font-black">月平均支出</p><p className="mt-2 text-2xl font-black">¥{Math.round(yearlyExpense / 12).toLocaleString()}</p><p className="text-xs font-bold text-slate-500">年間収支 ¥{(yearlyIncome - yearlyExpense).toLocaleString()}</p></section>
-        <section className="flex flex-col gap-3"><h2 className="text-sm font-black">年間カテゴリランキング</h2>{yearlyCategoryRanking.map((category, index) => <article key={category.id} className="flex justify-between rounded-2xl border-2 border-slate-800 bg-white p-3"><p className="text-sm font-black">{index + 1}. {category.icon} {category.name}</p><p className="text-sm font-black text-rose-600">¥{category.total.toLocaleString()}</p></article>)}</section>
+        <section className="flex flex-col gap-3"><div className="flex items-center justify-between gap-2"><div><h2 className="text-sm font-black">{includeFixedExpenses ? '年間カテゴリランキング' : '年間の見直せる支出ランキング'}</h2><p className="text-[10px] font-bold text-slate-500">{includeFixedExpenses ? '定期取引から生成された固定費を含みます' : `固定費 ¥${yearlyFixedExpense.toLocaleString()} を除外中`}</p></div><button type="button" onClick={() => setIncludeFixedExpenses((current) => !current)} className="min-h-11 shrink-0 rounded-xl border-2 border-slate-800 bg-sky-100 px-3 text-xs font-black">{includeFixedExpenses ? '固定費を除く' : '全支出を見る'}</button></div>{yearlyCategoryRanking.length === 0 ? <p className="rounded-2xl border-2 border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-400">対象となる支出はありません。</p> : yearlyCategoryRanking.map((category, index) => <article key={category.id} className="flex justify-between rounded-2xl border-2 border-slate-800 bg-white p-3"><p className="text-sm font-black">{index + 1}. {category.icon} {category.name}</p><p className="text-sm font-black text-rose-600">¥{category.total.toLocaleString()}</p></article>)}</section>
       </>}
     </div>
   );

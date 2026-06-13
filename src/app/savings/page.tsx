@@ -125,7 +125,7 @@ function SavingsPageContent() {
       <AppHeader title="貯金目標" currentUser={currentUser} />
       <form onSubmit={addGoal} className="flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-emerald-50 p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
         <h2 className="flex items-center gap-2 font-black"><Plus className="h-5 w-5" />新しい目標</h2>
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="旅行、緊急資金など" className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
+        <input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} placeholder="旅行、緊急資金など" className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
         <div className="flex gap-2"><input type="number" min="1" step="1" value={targetAmount} onChange={(event) => setTargetAmount(event.target.value)} placeholder="目標金額" className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-3 text-base" /><AmountCalculator value={targetAmount} min={1} onApply={(result) => setTargetAmount(String(result))} disabled={mutating !== null} /></div>
         <label className="flex flex-col gap-1 text-xs font-black">目標日（任意）<input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} className="mobile-date-input min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>
         <button disabled={mutating !== null} className="min-h-12 rounded-xl border-2 border-slate-800 bg-slate-900 text-sm font-black text-white disabled:opacity-50">{mutating === 'new' ? '保存中...' : '目標を追加する'}</button>

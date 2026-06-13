@@ -221,7 +221,7 @@ function RecurringPageContent() {
         </label>
         <label className="flex flex-col gap-1 text-xs font-black">
           メモ
-          <input value={description} onChange={(event) => setDescription(event.target.value)} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" placeholder="例: 家賃、給与" />
+          <input value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" placeholder="例: 家賃、給与" />
         </label>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="flex min-w-0 flex-col gap-1 text-xs font-black">毎月何日
@@ -268,7 +268,7 @@ function RecurringPageContent() {
           <form onSubmit={handleUpdate} className="flex max-h-[calc(90dvh-76px)] flex-col gap-3 overflow-y-auto p-4">
             <select value={editingItem.category_id} onChange={(event) => setEditingItem({ ...editingItem, category_id: event.target.value })} className="min-h-12 rounded-xl border-2 border-slate-800 bg-white px-3 text-base">{categories.map((category) => <option key={category.id} value={category.id}>{category.icon} {category.name}</option>)}</select>
             <div className="flex gap-2"><input type="number" min="1" step="1" value={editingItem.amount} onChange={(event) => setEditingItem({ ...editingItem, amount: Number(event.target.value) })} className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-3 text-base" /><AmountCalculator value={editingItem.amount} min={1} onApply={(result) => setEditingItem({ ...editingItem, amount: result })} disabled={mutatingId !== null} /></div>
-            <input value={editingItem.description} onChange={(event) => setEditingItem({ ...editingItem, description: event.target.value })} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
+            <input value={editingItem.description} maxLength={500} onChange={(event) => setEditingItem({ ...editingItem, description: event.target.value })} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
             <input type="number" min="1" max="31" value={editingItem.day_of_month} onChange={(event) => setEditingItem({ ...editingItem, day_of_month: Number(event.target.value) })} className="min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" />
             <label className="text-xs font-black">開始月<input type="month" value={editingItem.start_month.slice(0, 7)} onChange={(event) => setEditingItem({ ...editingItem, start_month: `${event.target.value}-01` })} className="mobile-date-input mt-1 min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>
             <label className="text-xs font-black">終了月（任意）<input type="month" value={editingItem.end_month?.slice(0, 7) || ''} onChange={(event) => setEditingItem({ ...editingItem, end_month: event.target.value ? `${event.target.value}-01` : null })} className="mobile-date-input mt-1 min-h-12 rounded-xl border-2 border-slate-800 px-3 text-base" /></label>
