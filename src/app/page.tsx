@@ -85,7 +85,7 @@ function HomePageContent() {
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
-          .select('amount, category_id, type')
+          .select('amount, category_id, type, recurring_transaction_id')
           .eq('user_id', currentUser)
           .gte('date', startOfMonth)
           .lte('date', safeEndOfMonth),
@@ -159,11 +159,15 @@ function HomePageContent() {
       const dismissedAlertKeys = new Set((dismissedAlertResult.data || []).map((item) => item.alert_key));
       const nextAlerts: HouseholdAlert[] = [];
       (categoryResult.data || []).filter((category) => category.type === 'expense').forEach((category) => {
-        const currentActual = (transactionResult.data || []).filter((item) => item.category_id === category.id && item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
+        const currentCategoryExpenses = (transactionResult.data || []).filter((item) => item.category_id === category.id && item.type === 'expense');
+        const currentActual = currentCategoryExpenses.reduce((sum, item) => sum + Number(item.amount), 0);
         const previousActual = (previousTransactionResult.data || []).filter((item) => item.category_id === category.id && item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
         const budget = Number((budgetResult.data || []).find((item) => item.category_id === category.id)?.amount || 0);
-        if (budget > 0 && currentActual >= budget) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:budget-over`, message: `${category.name}が予算を超過しています` });
-        else if (budget > 0 && currentActual >= budget * 0.8) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:budget-80`, message: `${category.name}が予算の80%に達しました` });
+        // 定期取引由来の固定費だけなら到達通知は不要だが、超過時は見逃さない。
+        const hasVariableExpense = currentCategoryExpenses.some((item) => item.recurring_transaction_id === null);
+        if (budget > 0 && currentActual > budget) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:budget-over`, message: `${category.name}が予算を超過しています` });
+        else if (budget > 0 && currentActual === budget && hasVariableExpense) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:budget-reached`, message: `${category.name}が予算に到達しました` });
+        else if (budget > 0 && currentActual >= budget * 0.8 && hasVariableExpense) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:budget-80`, message: `${category.name}が予算の80%に達しました` });
         if (previousActual > 0 && currentActual >= previousActual * 1.5 && currentActual - previousActual >= 3000) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:previous-increase`, message: `${category.name}が前月より大きく増えています` });
       });
       setAlerts(nextAlerts.filter((alert) => !dismissedAlertKeys.has(alert.key)));

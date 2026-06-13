@@ -11,6 +11,7 @@ import type { Database } from '../../lib/database.types';
 import { useHorizontalSwipe } from '../../components/mobile-ui';
 import { AppHeader } from '../../components/mobile-ui';
 import { userErrorMessage } from '../../lib/user-errors';
+import { useCurrentProfileId } from '../../lib/household-profiles';
 
 type ReportTransaction = Pick<Transaction, 'id' | 'amount' | 'category_id' | 'date' | 'type' | 'recurring_transaction_id'>;
 type TagRow = Database['public']['Tables']['tags']['Row'];
@@ -69,6 +70,8 @@ function chartAreaPath(points: { x: number; y: number }[], bottom: number) {
 function ReportsPageContent() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const ownProfileId = useCurrentProfileId();
+  const canRunDiagnosis = ownProfileId === currentUser;
   const [transactions, setTransactions] = useState<ReportTransaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -249,6 +252,10 @@ function ReportsPageContent() {
   };
   const selectedDiagnosis = diagnoses.find((diagnosis) => diagnosis.id === selectedDiagnosisId) || diagnoses[0] || null;
   const runDiagnosis = async () => {
+    if (!canRunDiagnosis) {
+      setDiagnosisError('参照中のプロフィールではAI診断を実行できません。本人のログインでお試しください。');
+      return;
+    }
     setDiagnosing(true);
     setDiagnosisError(null);
     try {
@@ -256,7 +263,7 @@ function ReportsPageContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetUserId: currentUser, targetMonth: currentMonth }),
-        signal: AbortSignal.timeout(35_000),
+        signal: AbortSignal.timeout(60_000),
       });
       const result = await response.json() as { diagnosis?: AiDiagnosis; error?: string };
       if (!response.ok || !result.diagnosis) throw new Error(result.error || 'AI診断に失敗しました。');
@@ -310,10 +317,11 @@ function ReportsPageContent() {
             <h2 className="flex items-center gap-2 text-sm font-black"><Sparkles className="h-5 w-5 text-violet-600" />AI家計診断</h2>
             <p className="mt-1 flex items-start gap-1 text-xs font-bold leading-relaxed text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />AIへ送るのは集計値だけです。取引メモやタグは送信せず、給料日前は未来日付の収入と定期収入予定も考慮します。</p>
           </div>
-          <button type="button" onClick={runDiagnosis} disabled={diagnosing || !diagnosisMonthSupported} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-violet-300 text-sm font-black disabled:opacity-50">
+          <button type="button" onClick={runDiagnosis} disabled={diagnosing || !diagnosisMonthSupported || !canRunDiagnosis} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-violet-300 text-sm font-black disabled:opacity-50">
             {diagnosing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}{diagnosing ? '診断中...' : 'AI家計診断を実行'}
           </button>
           {!diagnosisMonthSupported && <p className="rounded-xl bg-amber-100 p-3 text-xs font-bold text-amber-800">AI家計診断は、当月から過去5年以内の月で利用できます。</p>}
+          {ownProfileId !== undefined && !canRunDiagnosis && <p className="rounded-xl bg-sky-100 p-3 text-xs font-bold text-sky-800">参照中のプロフィールは診断できません。本人のログインで実行してください。</p>}
           {diagnosisError && <p className="rounded-xl bg-rose-100 p-3 text-xs font-bold text-rose-700">{diagnosisError}</p>}
           {diagnoses.length > 1 && <div className="flex gap-2 overflow-x-auto pb-1">{diagnoses.map((diagnosis, index) => <button type="button" key={diagnosis.id} onClick={() => setSelectedDiagnosisId(diagnosis.id)} className={`min-h-11 shrink-0 rounded-xl border px-3 text-xs font-black ${selectedDiagnosis?.id === diagnosis.id ? 'border-slate-800 bg-white' : 'border-slate-300 bg-violet-100 text-slate-500'}`}>{index === 0 ? '最新' : new Date(diagnosis.created_at).toLocaleDateString('ja-JP')}</button>)}</div>}
           {selectedDiagnosis ? <article className="flex flex-col gap-4 rounded-2xl border-2 border-slate-800 bg-white p-4">
