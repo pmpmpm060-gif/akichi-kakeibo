@@ -128,6 +128,7 @@ export const config = {
     '/recurring/:path*',
     '/reports/:path*',
     '/savings/:path*',
+    '/special-expenses/:path*',
     '/more/:path*',
     '/tools/:path*',
     '/setup/:path*',

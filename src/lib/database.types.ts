@@ -471,6 +471,75 @@ export type Database = {
           },
         ]
       }
+      special_expense_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          household_id: string
+          id: string
+          payment_date: string
+          plan_id: string
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          household_id?: string
+          id?: string
+          payment_date: string
+          plan_id: string
+          transaction_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          household_id?: string
+          id?: string
+          payment_date?: string
+          plan_id?: string
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      special_expense_plans: {
+        Row: {
+          category_id: string
+          created_at: string
+          enabled: boolean
+          household_id: string
+          id: string
+          monthly_reserve: number
+          name: string
+          reserve_start_month: string
+          user_id: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          enabled?: boolean
+          household_id?: string
+          id?: string
+          monthly_reserve: number
+          name: string
+          reserve_start_month: string
+          user_id: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          enabled?: boolean
+          household_id?: string
+          id?: string
+          monthly_reserve?: number
+          name?: string
+          reserve_start_month?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       savings_contributions: {
         Row: {
           amount: number
@@ -795,6 +864,17 @@ export type Database = {
         Args: { target_month: string; target_profile_id: string }
         Returns: string
       }
+      create_special_expense_plan: {
+        Args: {
+          target_category_id: string
+          target_monthly_reserve: number
+          target_name: string
+          target_payments: Json
+          target_reserve_start_month: string
+          target_user_id: string
+        }
+        Returns: string
+      }
       create_transaction_with_tags: {
         Args: {
           target_amount: number
@@ -826,11 +906,23 @@ export type Database = {
           category_type: string
         }[]
       }
+      generate_special_expense_payments: {
+        Args: { target_month: string; target_user_id: string }
+        Returns: number
+      }
       get_savings_goal_totals: {
         Args: { target_user_id: string }
         Returns: {
           goal_id: string
           total: number
+        }[]
+      }
+      get_special_expense_summary: {
+        Args: { target_month: string; target_user_id: string }
+        Returns: {
+          monthly_reserve: number
+          reserve_balance: number
+          scheduled_payment: number
         }[]
       }
       get_my_approval_status: { Args: never; Returns: string }

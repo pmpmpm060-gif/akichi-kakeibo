@@ -91,13 +91,13 @@ function DashboardPageContent() {
       const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
       if (canEdit) {
-        const generateResult = await supabase.rpc('generate_recurring_transactions', {
-          target_user_id: currentUser,
-          target_month: startOfMonth,
-        });
+        const [generateResult, specialGenerateResult] = await Promise.all([
+          supabase.rpc('generate_recurring_transactions', { target_user_id: currentUser, target_month: startOfMonth }),
+          supabase.rpc('generate_special_expense_payments', { target_user_id: currentUser, target_month: startOfMonth }),
+        ]);
         if (ignore) return;
-        if (generateResult.error) {
-          setDataError('定期取引の反映に失敗しました。通信状況を確認して、もう一度お試しください。');
+        if (generateResult.error || specialGenerateResult.error) {
+          setDataError('定期取引・特別支出予定の反映に失敗しました。通信状況を確認して、もう一度お試しください。');
           setLoading(false);
           return;
         }

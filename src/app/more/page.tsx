@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { BarChart3, CalendarClock, FolderKanban, Loader2, PiggyBank, ShieldCheck, Wrench } from 'lucide-react';
+import { BarChart3, CalendarClock, CalendarRange, FolderKanban, Loader2, PiggyBank, ShieldCheck, Wrench } from 'lucide-react';
 import { AppHeader } from '../../components/mobile-ui';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { supabase } from '../../lib/supabase';
@@ -22,6 +22,7 @@ function MorePageContent() {
     { href: '/categories', label: 'カテゴリ設定', description: '収入・支出の分類を管理', icon: FolderKanban, color: 'bg-pink-100' },
     { href: '/reports', label: '家計レポート', description: '月別・年間の傾向を確認', icon: BarChart3, color: 'bg-indigo-100' },
     { href: '/recurring', label: '定期取引', description: '固定費・定期収入を管理', icon: CalendarClock, color: 'bg-sky-100' },
+    { href: '/special-expenses', label: '特別支出予定', description: '税金・年払い・不定期支出を管理', icon: CalendarRange, color: 'bg-cyan-100' },
     { href: '/savings', label: '貯金目標', description: '目標と積立状況を管理', icon: PiggyBank, color: 'bg-emerald-100' },
     { href: '/tools', label: '便利機能設定', description: 'タグ・テンプレート・通知を管理', icon: Wrench, color: 'bg-amber-100' },
     ...(isAdmin ? [{ href: '/admin/approvals', label: '利用申請の承認', description: '新規アカウントの利用を許可', icon: ShieldCheck, color: 'bg-emerald-100' }] : []),
