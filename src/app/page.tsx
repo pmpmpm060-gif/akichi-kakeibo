@@ -4,12 +4,12 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, BarChart3, CalendarClock, Bell, PiggyBank, X } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, BarChart3, CalendarClock, Bell, PiggyBank, X, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser } from '../lib/household-users';
 import type { Category } from '../lib/database-helpers';
-import { useHouseholdProfiles } from '../lib/household-profiles';
+import { useCurrentProfileId, useHouseholdProfiles } from '../lib/household-profiles';
 import { userErrorMessage } from '../lib/user-errors';
 
 type BudgetSummaryItem = Category & {
@@ -24,7 +24,9 @@ function HomePageContent() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
   const profiles = useHouseholdProfiles();
+  const ownProfileId = useCurrentProfileId();
   const currentProfile = profiles.find((profile) => profile.profile_id === currentUser);
+  const canEdit = ownProfileId === currentUser;
 
   const [totalExpense, setTotalExpense] = useState<number>(0);
   const [totalBudget, setTotalBudget] = useState<number>(0);
@@ -66,15 +68,17 @@ function HomePageContent() {
       // 日当たり目安は今日から計算するため、残り日数に今日を含める。
       const remDays = lastDay - todayNum + 1;
 
-      const generateResult = await supabase.rpc('generate_recurring_transactions', {
-        target_user_id: currentUser,
-        target_month: startOfMonth,
-      });
-      if (ignore) return;
-      if (generateResult.error) {
-        setDataError(generateResult.error.message);
-        setLoading(false);
-        return;
+      if (canEdit) {
+        const generateResult = await supabase.rpc('generate_recurring_transactions', {
+          target_user_id: currentUser,
+          target_month: startOfMonth,
+        });
+        if (ignore) return;
+        if (generateResult.error) {
+          setDataError('定期取引の反映に失敗しました。通信状況を確認して、もう一度お試しください。');
+          setLoading(false);
+          return;
+        }
       }
 
       const [categoryResult, transactionResult, budgetResult, previousTransactionResult, dismissedAlertResult] = await Promise.all([
@@ -97,7 +101,7 @@ function HomePageContent() {
 
       const error = categoryResult.error || transactionResult.error || budgetResult.error || previousTransactionResult.error || dismissedAlertResult.error;
       if (error) {
-        setDataError(error.message);
+        setDataError('ホーム画面のデータ取得に失敗しました。通信状況を確認して、もう一度お試しください。');
         setLoading(false);
         return;
       }
@@ -176,7 +180,7 @@ function HomePageContent() {
     return () => {
       ignore = true;
     };
-  }, [currentUser, retryKey]);
+  }, [canEdit, currentUser, retryKey]);
 
   const toggleUser = () => {
     if (profiles.length < 2) return;
@@ -275,6 +279,7 @@ function HomePageContent() {
       </div>
 
       {dataError && <DataErrorCard message={dataError} onRetry={retryFetch} />}
+      {ownProfileId !== undefined && !canEdit && <p className="flex items-center gap-2 rounded-2xl border-2 border-slate-800 bg-sky-50 px-3 py-2 text-xs font-black text-sky-800"><Eye className="h-4 w-4 shrink-0" />このプロフィールは参照モードです。変更は本人のログインで行ってください。</p>}
 
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
         <Link href={`/reports?user=${currentUser}`} className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border-2 border-slate-800 bg-indigo-100 px-1 text-center text-[10px] font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
@@ -287,7 +292,7 @@ function HomePageContent() {
           <PiggyBank className="h-5 w-5 shrink-0" /><span>貯金目標</span>
         </Link>
       </div>
-      {!loading && alerts.length > 0 && <section className="flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-orange-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"><h2 className="flex items-center gap-2 text-sm font-black text-orange-800"><Bell className="h-5 w-5" />家計アラート</h2>{alerts.map((item) => <div key={item.key} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700"><span className="min-w-0 flex-1">・{item.message}</span><button type="button" onClick={() => dismissAlert(item)} disabled={dismissingAlertKey !== null} aria-label={`${item.message}を削除`} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 disabled:opacity-50">{dismissingAlertKey === item.key ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}</button></div>)}</section>}
+      {!loading && alerts.length > 0 && <section className="flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-orange-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"><h2 className="flex items-center gap-2 text-sm font-black text-orange-800"><Bell className="h-5 w-5" />家計アラート</h2>{alerts.map((item) => <div key={item.key} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700"><span className="min-w-0 flex-1">・{item.message}</span>{canEdit && <button type="button" onClick={() => dismissAlert(item)} disabled={dismissingAlertKey !== null} aria-label={`${item.message}を削除`} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 disabled:opacity-50">{dismissingAlertKey === item.key ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}</button>}</div>)}</section>}
 
       {/* 押下するとカテゴリ別の支出予算案内を展開する。 */}
       {!dataError && (

@@ -15,6 +15,7 @@ import {
 import type { Database } from '../../lib/database.types';
 import { userErrorMessage } from '../../lib/user-errors';
 import { AmountCalculator } from '../../components/amount-calculator';
+import { useCurrentProfileId } from '../../lib/household-profiles';
 
 type TagRow = Database['public']['Tables']['tags']['Row'];
 type Template = Database['public']['Tables']['transaction_templates']['Row'];
@@ -24,6 +25,8 @@ function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const ownProfileId = useCurrentProfileId();
+  const canEdit = ownProfileId === currentUser;
   const notify = useToast();
   const confirmAction = useConfirm();
   const descriptionInputRef = useRef<HTMLInputElement>(null);
@@ -87,15 +90,17 @@ function DashboardPageContent() {
       const lastDay = new Date(jstYear, currentDate.getMonth() + 1, 0).getDate();
       const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
-      const generateResult = await supabase.rpc('generate_recurring_transactions', {
-        target_user_id: currentUser,
-        target_month: startOfMonth,
-      });
-      if (ignore) return;
-      if (generateResult.error) {
-        setDataError(generateResult.error.message);
-        setLoading(false);
-        return;
+      if (canEdit) {
+        const generateResult = await supabase.rpc('generate_recurring_transactions', {
+          target_user_id: currentUser,
+          target_month: startOfMonth,
+        });
+        if (ignore) return;
+        if (generateResult.error) {
+          setDataError('定期取引の反映に失敗しました。通信状況を確認して、もう一度お試しください。');
+          setLoading(false);
+          return;
+        }
       }
 
       const [categoryResult, transactionResult, tagResult, transactionTagResult, templateResult, savedFilterResult] = await Promise.all([
@@ -121,7 +126,7 @@ function DashboardPageContent() {
 
       const error = categoryResult.error || transactionResult.error || tagResult.error || transactionTagResult.error || templateResult.error || savedFilterResult.error;
       if (error) {
-        setDataError(error.message);
+        setDataError('家計簿データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
         setLoading(false);
         return;
       }
@@ -159,7 +164,7 @@ function DashboardPageContent() {
     return () => {
       ignore = true;
     };
-  }, [currentDate, currentUser, jstYear, retryKey, yearMonth]);
+  }, [canEdit, currentDate, currentUser, jstYear, retryKey, yearMonth]);
 
   const retryFetch = () => {
     setLoading(true);

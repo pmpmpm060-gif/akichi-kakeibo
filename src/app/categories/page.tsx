@@ -54,7 +54,7 @@ function CategoriesPageContent() {
       if (ignore) return;
 
       if (error) {
-        setDataError(error.message);
+        setDataError('カテゴリの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
       } else if (data) {
         setCategories(data);
       }

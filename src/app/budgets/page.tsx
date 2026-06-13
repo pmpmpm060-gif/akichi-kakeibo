@@ -48,7 +48,7 @@ function BudgetsPageContent() {
 
       const error = categoryResult.error || budgetResult.error;
       if (error) {
-        setDataError(error.message);
+        setDataError('予算データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
         setLoading(false);
         return;
       }

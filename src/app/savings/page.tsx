@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Loader2, PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
-import type { SavingsContribution, SavingsGoal } from '../../lib/database-helpers';
+import type { SavingsGoal } from '../../lib/database-helpers';
 import { DataErrorCard } from '../../components/data-error-card';
 import { AppHeader, useConfirm } from '../../components/mobile-ui';
 import { userErrorMessage } from '../../lib/user-errors';
@@ -34,18 +34,18 @@ function SavingsPageContent() {
       try {
         const [goalResult, contributionResult] = await Promise.all([
           supabase.from('savings_goals').select('*').eq('user_id', currentUser).order('created_at', { ascending: false }),
-          supabase.from('savings_contributions').select('*').eq('user_id', currentUser),
+          supabase.rpc('get_savings_goal_totals', { target_user_id: currentUser }),
         ]);
         if (ignore) return;
         const error = goalResult.error || contributionResult.error;
         if (error) {
-          setDataError(error.message);
+          setDataError('貯金データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
           return;
         }
-        const contributions = (contributionResult.data || []) as SavingsContribution[];
+        const totalMap = new Map((contributionResult.data || []).map((item) => [item.goal_id, Number(item.total)]));
         setGoals((goalResult.data || []).map((goal) => ({
           ...goal,
-          total: contributions.filter((item) => item.goal_id === goal.id).reduce((sum, item) => sum + item.amount, 0),
+          total: totalMap.get(goal.id) || 0,
         })));
         setDataError(null);
       } catch {

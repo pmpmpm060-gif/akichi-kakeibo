@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Home, List, Menu, Plus, PiggyBank } from 'lucide-react';
 import { parseHouseholdUser } from '../lib/household-users';
+import { useCurrentProfileId } from '../lib/household-profiles';
 
 const items = [
   { label: 'ホーム', path: '/', icon: Home },
@@ -17,6 +18,8 @@ export function MobileBottomNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const ownProfileId = useCurrentProfileId();
+  const visibleItems = items.filter((item) => !item.primary || ownProfileId === currentUser);
 
   if (pathname === '/login' || pathname === '/setup' || pathname === '/approval-pending') return null;
 
@@ -25,8 +28,8 @@ export function MobileBottomNav() {
       aria-label="メインナビゲーション"
       className="mobile-safe-bottom fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md border-t-2 border-slate-800 bg-white/95 px-2 pt-2 shadow-[0_-4px_18px_rgba(15,23,42,0.12)] backdrop-blur"
     >
-      <div className="grid grid-cols-5 gap-1">
-        {items.map((item) => {
+      <div className={`grid gap-1 ${visibleItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+        {visibleItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.path && !item.primary;
           const href = `${item.path}?user=${currentUser}${item.hash || ''}`;

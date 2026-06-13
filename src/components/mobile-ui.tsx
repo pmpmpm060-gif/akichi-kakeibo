@@ -1,9 +1,9 @@
 "use client";
 
 import Link from 'next/link';
-import { AlertTriangle, ArrowLeft, CheckCircle2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Eye, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
-import { useProfileDisplay } from '../lib/household-profiles';
+import { useCurrentProfileId, useProfileDisplay } from '../lib/household-profiles';
 
 type Toast = { id: number; message: string; tone: 'success' | 'error' };
 const ToastContext = createContext<(message: string, tone?: Toast['tone']) => void>(() => undefined);
@@ -49,7 +49,9 @@ export const useConfirm = () => useContext(ConfirmContext);
 
 export function AppHeader({ title, currentUser, subtitle }: { title: string; currentUser: string; subtitle?: string }) {
   const profile = useProfileDisplay(currentUser);
+  const ownProfileId = useCurrentProfileId();
   return (
+    <>
     <header className="flex items-center justify-between gap-2 pt-2">
       <div className="flex min-w-0 items-center gap-3">
         <Link href={`/?user=${currentUser}`} aria-label="ホームへ戻る" className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
@@ -64,6 +66,12 @@ export function AppHeader({ title, currentUser, subtitle }: { title: string; cur
         {profile?.icon} {profile?.display_name || (currentUser === 'user_a' ? 'ママ' : 'パパ')}
       </span>
     </header>
+    {ownProfileId !== undefined && ownProfileId !== currentUser && (
+      <p className="flex items-center gap-2 rounded-2xl border-2 border-slate-800 bg-sky-50 px-3 py-2 text-xs font-black text-sky-800">
+        <Eye className="h-4 w-4 shrink-0" />このプロフィールは参照モードです。変更は本人のログインで行ってください。
+      </p>
+    )}
+    </>
   );
 }
 

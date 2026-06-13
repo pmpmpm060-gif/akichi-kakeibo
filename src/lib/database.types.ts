@@ -231,6 +231,7 @@ export type Database = {
       }
       household_profiles: {
         Row: {
+          auth_user_id: string | null
           created_at: string
           display_name: string
           household_id: string
@@ -239,6 +240,7 @@ export type Database = {
           sort_order: number
         }
         Insert: {
+          auth_user_id?: string | null
           created_at?: string
           display_name: string
           household_id: string
@@ -247,6 +249,7 @@ export type Database = {
           sort_order?: number
         }
         Update: {
+          auth_user_id?: string | null
           created_at?: string
           display_name?: string
           household_id?: string
@@ -752,6 +755,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assign_household_profile: {
+        Args: { target_profile_id: string; target_user_id: string }
+        Returns: undefined
+      }
+      can_edit_profile: {
+        Args: { target_household_id: string; target_profile_id: string }
+        Returns: boolean
+      }
       can_insert_ai_diagnosis: {
         Args: { target_household_id: string; target_user_id: string }
         Returns: boolean
@@ -769,6 +780,7 @@ export type Database = {
         Returns: string
       }
       current_household_id: { Args: never; Returns: string }
+      current_profile_id: { Args: never; Returns: string }
       delete_unused_category: {
         Args: { target_category_id: string }
         Returns: number
@@ -785,6 +797,13 @@ export type Database = {
           carryover_amount: number
           category_id: string
           category_type: string
+        }[]
+      }
+      get_savings_goal_totals: {
+        Args: { target_user_id: string }
+        Returns: {
+          goal_id: string
+          total: number
         }[]
       }
       get_my_approval_status: { Args: never; Returns: string }

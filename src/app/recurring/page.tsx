@@ -56,7 +56,7 @@ function RecurringPageContent() {
       if (ignore) return;
       const error = categoryResult.error || recurringResult.error;
       if (error) {
-        setDataError(error.message);
+        setDataError('定期取引の取得に失敗しました。通信状況を確認して、もう一度お試しください。');
       } else {
         const categoryData = categoryResult.data || [];
         setCategories(categoryData);

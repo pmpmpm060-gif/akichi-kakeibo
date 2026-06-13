@@ -74,6 +74,9 @@ function ReportsPageContent() {
   const [diagnosisError, setDiagnosisError] = useState<string | null>(null);
 
   const currentMonth = monthKey(selectedDate);
+  const diagnosisCurrentMonth = monthKey(new Date());
+  const diagnosisEarliestMonth = `${Number(diagnosisCurrentMonth.slice(0, 4)) - 5}-${diagnosisCurrentMonth.slice(5)}`;
+  const diagnosisMonthSupported = currentMonth >= diagnosisEarliestMonth && currentMonth <= diagnosisCurrentMonth;
   const previousDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1);
   const previousMonth = monthKey(previousDate);
   const reportStart = `${selectedDate.getFullYear() - 1}-12-01`;
@@ -97,7 +100,7 @@ function ReportsPageContent() {
       ]);
       if (ignore) return;
       const error = transactionResult.error || categoryResult.error || tagResult.error || transactionTagResult.error || reviewResult.error || savedReportResult.error || diagnosisResult.error;
-      if (error) setDataError(error.message);
+      if (error) setDataError('レポートの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
       else {
         setTransactions(transactionResult.data || []);
         setCategories(categoryResult.data || []);
@@ -271,9 +274,10 @@ function ReportsPageContent() {
             <h2 className="flex items-center gap-2 text-sm font-black"><Sparkles className="h-5 w-5 text-violet-600" />AI家計診断</h2>
             <p className="mt-1 flex items-start gap-1 text-xs font-bold leading-relaxed text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />AIへ送るのは集計値だけです。取引メモやタグは送信せず、給料日前は未来日付の収入と定期収入予定も考慮します。</p>
           </div>
-          <button type="button" onClick={runDiagnosis} disabled={diagnosing} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-violet-300 text-sm font-black disabled:opacity-50">
+          <button type="button" onClick={runDiagnosis} disabled={diagnosing || !diagnosisMonthSupported} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-violet-300 text-sm font-black disabled:opacity-50">
             {diagnosing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}{diagnosing ? '診断中...' : 'AI家計診断を実行'}
           </button>
+          {!diagnosisMonthSupported && <p className="rounded-xl bg-amber-100 p-3 text-xs font-bold text-amber-800">AI家計診断は、当月から過去5年以内の月で利用できます。</p>}
           {diagnosisError && <p className="rounded-xl bg-rose-100 p-3 text-xs font-bold text-rose-700">{diagnosisError}</p>}
           {diagnoses.length > 1 && <div className="flex gap-2 overflow-x-auto pb-1">{diagnoses.map((diagnosis, index) => <button type="button" key={diagnosis.id} onClick={() => setSelectedDiagnosisId(diagnosis.id)} className={`min-h-11 shrink-0 rounded-xl border px-3 text-xs font-black ${selectedDiagnosis?.id === diagnosis.id ? 'border-slate-800 bg-white' : 'border-slate-300 bg-violet-100 text-slate-500'}`}>{index === 0 ? '最新' : new Date(diagnosis.created_at).toLocaleDateString('ja-JP')}</button>)}</div>}
           {selectedDiagnosis ? <article className="flex flex-col gap-4 rounded-2xl border-2 border-slate-800 bg-white p-4">

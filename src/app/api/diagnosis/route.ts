@@ -15,7 +15,10 @@ type Diagnosis = {
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const MAX_AMOUNT = 1_000_000_000;
+const MAX_REQUEST_BYTES = 10_000;
 const PAGE_SIZE = 1000;
+class RequestBodyTooLargeError extends Error {}
+
 type DiagnosisTransaction = {
   amount: number;
   category_id: string;
@@ -57,6 +60,39 @@ function tokyoDateKey() {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date());
+}
+
+async function readJsonBody(request: Request) {
+  const reader = request.body?.getReader();
+  if (!reader) throw new Error('Request body is missing.');
+
+  const decoder = new TextDecoder();
+  let size = 0;
+  let text = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_REQUEST_BYTES) throw new RequestBodyTooLargeError('Request body is too large.');
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+
+  const parsed = JSON.parse(text) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Request body must be an object.');
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function isSupportedDiagnosisMonth(targetMonth: string) {
+  const currentMonth = tokyoDateKey().slice(0, 7);
+  const earliestMonth = `${Number(currentMonth.slice(0, 4)) - 5}-${currentMonth.slice(5)}`;
+  return targetMonth >= earliestMonth && targetMonth <= currentMonth;
 }
 
 function scheduledDate(monthStart: string, dayOfMonth: number) {
@@ -108,8 +144,11 @@ export async function POST(request: Request) {
   try {
     const requestOrigin = request.headers.get('origin');
     const expectedOrigin = new URL(request.url).origin;
-    if (requestOrigin && requestOrigin !== expectedOrigin) {
+    if (requestOrigin !== expectedOrigin) {
       return NextResponse.json({ error: '許可されていないリクエストです。' }, { status: 403 });
+    }
+    if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
+      return NextResponse.json({ error: '入力形式が不正です。' }, { status: 415 });
     }
 
     const cookieStore = await cookies();
@@ -123,25 +162,42 @@ export async function POST(request: Request) {
     const { data: approved, error: approvalError } = await supabase.rpc('is_approved_user');
     if (approvalError || !approved) return NextResponse.json({ error: '利用承認が必要です。' }, { status: 403 });
     const contentLength = Number(request.headers.get('content-length') || 0);
-    if (!Number.isFinite(contentLength) || contentLength > 10_000) {
+    if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > MAX_REQUEST_BYTES) {
       return NextResponse.json({ error: '入力内容が大きすぎます。' }, { status: 413 });
     }
 
     stage = 'validate-input';
     let body: Record<string, unknown>;
     try {
-      body = await request.json() as Record<string, unknown>;
-    } catch {
-      return NextResponse.json({ error: '入力内容が不正です。' }, { status: 400 });
+      body = await readJsonBody(request);
+    } catch (error) {
+      return error instanceof RequestBodyTooLargeError
+        ? NextResponse.json({ error: '入力内容が大きすぎます。' }, { status: 413 })
+        : NextResponse.json({ error: '入力内容が不正です。' }, { status: 400 });
     }
     const targetUserId = body?.targetUserId;
     const targetMonth = body?.targetMonth;
-    if (typeof targetUserId !== 'string' || typeof targetMonth !== 'string' || !MONTH_PATTERN.test(targetMonth)) {
+    if (
+      typeof targetUserId !== 'string'
+      || typeof targetMonth !== 'string'
+      || !MONTH_PATTERN.test(targetMonth)
+      || !isSupportedDiagnosisMonth(targetMonth)
+    ) {
       return NextResponse.json({ error: '入力内容が不正です。' }, { status: 400 });
     }
     stage = 'validate-profile';
     const { data: profile } = await supabase.from('household_profiles').select('profile_id').eq('profile_id', targetUserId).maybeSingle();
     if (!profile) return NextResponse.json({ error: '対象ユーザーを確認できません。' }, { status: 403 });
+    const { data: ownProfileId } = await supabase.rpc('current_profile_id');
+    if (ownProfileId !== targetUserId) return NextResponse.json({ error: '参照中のプロフィールはAI診断できません。' }, { status: 403 });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return NextResponse.json({ error: 'AI診断を利用できる状態ではありません。' }, { status: 503 });
+    stage = 'check-quota';
+    const { data: quotaAvailable, error: quotaError } = await supabase.rpc('consume_ai_diagnosis_quota');
+    if (quotaError) throw quotaError;
+    if (!quotaAvailable) {
+      return NextResponse.json({ error: 'AI診断の実行回数が多すぎます。時間を空けてからお試しください。' }, { status: 429 });
+    }
 
     const monthStart = `${targetMonth}-01`;
     const startDate = new Date(`${monthStart}T00:00:00Z`);
@@ -154,7 +210,7 @@ export async function POST(request: Request) {
       supabase.rpc('get_effective_budgets', { target_user_id: targetUserId, target_month: monthStart }),
       supabase.from('recurring_transactions').select('id, amount, category_id, day_of_month, start_month, end_month').eq('user_id', targetUserId).eq('enabled', true),
       supabase.from('savings_goals').select('id, target_amount, target_date').eq('user_id', targetUserId),
-      supabase.from('savings_contributions').select('goal_id, amount').eq('user_id', targetUserId),
+      supabase.rpc('get_savings_goal_totals', { target_user_id: targetUserId }),
     ]);
     const queryError = transactionsResult.error || categoriesResult.error || budgetsResult.error || recurringResult.error || goalsResult.error || contributionsResult.error;
     if (queryError) throw queryError;
@@ -176,7 +232,7 @@ export async function POST(request: Request) {
       budget: Math.round(Number((budgetsResult.data || []).find((budget) => budget.category_id === category.id)?.amount || 0)),
     })).filter((row) => row.expense > 0 || row.budget > 0);
     const contributionMap = new Map<string, number>();
-    for (const row of contributionsResult.data || []) contributionMap.set(row.goal_id, (contributionMap.get(row.goal_id) || 0) + row.amount);
+    for (const row of contributionsResult.data || []) contributionMap.set(row.goal_id, Number(row.total));
     const recurringRows = recurringResult.data || [];
     const expenseCategoryIds = new Set(categories.filter((category) => category.type === 'expense').map((category) => category.id));
     const incomeCategoryIds = new Set(categories.filter((category) => category.type === 'income').map((category) => category.id));
@@ -216,15 +272,6 @@ export async function POST(request: Request) {
       monthlyRecurringExpense: sumAmounts(applicableRecurring.filter((row) => expenseCategoryIds.has(row.category_id))),
       savings: (goalsResult.data || []).map((goal) => ({ targetAmount: goal.target_amount, targetDate: goal.target_date, savedAmount: contributionMap.get(goal.id) || 0 })),
     };
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: 'AI診断を利用できる状態ではありません。' }, { status: 503 });
-    stage = 'check-quota';
-    const { data: quotaAvailable, error: quotaError } = await supabase.rpc('consume_ai_diagnosis_quota');
-    if (quotaError) throw quotaError;
-    if (!quotaAvailable) {
-      return NextResponse.json({ error: 'AI診断の実行回数が多すぎます。1時間ほど待ってからお試しください。' }, { status: 429 });
-    }
-
     stage = 'generate-diagnosis';
     const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 25_000 } });
     const response = await ai.models.generateContent({

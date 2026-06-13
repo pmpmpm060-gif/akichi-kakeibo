@@ -81,6 +81,19 @@ export async function proxy(req: NextRequest) {
     url.pathname = '/';
     return NextResponse.redirect(url);
   }
+  if (
+    membership
+    && !req.nextUrl.searchParams.has('user')
+    && req.nextUrl.pathname !== '/admin/approvals'
+    && !isApprovalPage
+  ) {
+    const { data: currentProfileId } = await supabase.rpc('current_profile_id');
+    if (currentProfileId) {
+      const url = req.nextUrl.clone();
+      url.searchParams.set('user', currentProfileId);
+      return NextResponse.redirect(url);
+    }
+  }
 
   return res;
 }
