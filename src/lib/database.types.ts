@@ -273,38 +273,6 @@ export type Database = {
           },
         ]
       }
-      notification_preferences: {
-        Row: {
-          enabled: boolean
-          household_id: string
-          reminder_hour: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          enabled?: boolean
-          household_id?: string
-          reminder_hour?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          enabled?: boolean
-          household_id?: string
-          reminder_hour?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "notification_preferences_household_id_fkey"
-            columns: ["household_id"]
-            isOneToOne: false
-            referencedRelation: "households"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       recurring_transactions: {
         Row: {
           amount: number

@@ -4,7 +4,6 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import { MobileBottomNav } from "../components/mobile-bottom-nav";
 import { ScreenHelpPig } from "../components/screen-help-pig";
 import { ToastProvider } from "../components/mobile-ui";
-import { PwaManager } from "../components/pwa-manager";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
@@ -12,7 +11,6 @@ const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "ぽっぷ家計簿",
   description: "楽しく続ける家計簿アプリ",
-  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({
@@ -32,7 +30,6 @@ export default function RootLayout({
             <Suspense fallback={null}>
               <MobileBottomNav />
               <ScreenHelpPig />
-              <PwaManager />
             </Suspense>
           </div>
         </ToastProvider>
