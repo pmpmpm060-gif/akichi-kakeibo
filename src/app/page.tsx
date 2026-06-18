@@ -217,10 +217,12 @@ function HomePageContent() {
 
   const toggleUser = () => {
     if (profiles.length < 2) return;
+    const currentIndex = profiles.findIndex((profile) => profile.profile_id === currentUser);
+    const nextProfile = profiles[currentIndex >= 0 ? (currentIndex + 1) % profiles.length : 0];
+    const nextUser = parseHouseholdUser(nextProfile?.profile_id || null);
+    if (nextUser === currentUser) return;
     setLoading(true);
     setDataError(null);
-    const currentIndex = profiles.findIndex((profile) => profile.profile_id === currentUser);
-    const nextUser = profiles[(currentIndex + 1) % profiles.length].profile_id;
     router.replace(`/?user=${nextUser}`);
   };
 
