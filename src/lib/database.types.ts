@@ -362,44 +362,6 @@ export type Database = {
           },
         ]
       }
-      saved_filters: {
-        Row: {
-          conditions: Json
-          created_at: string
-          filter_type: string
-          household_id: string
-          id: string
-          name: string
-          user_id: string
-        }
-        Insert: {
-          conditions?: Json
-          created_at?: string
-          filter_type: string
-          household_id?: string
-          id?: string
-          name: string
-          user_id: string
-        }
-        Update: {
-          conditions?: Json
-          created_at?: string
-          filter_type?: string
-          household_id?: string
-          id?: string
-          name?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "saved_filters_household_id_fkey"
-            columns: ["household_id"]
-            isOneToOne: false
-            referencedRelation: "households"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       special_expense_payments: {
         Row: {
           amount: number

@@ -2,18 +2,16 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ArrowDownRight, ArrowUpRight, BarChart3, Bookmark, ChevronLeft, ChevronRight, Loader2, Save, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, BarChart3, ChevronLeft, ChevronRight, Loader2, Save, TrendingDown, TrendingUp } from 'lucide-react';
 import { DataErrorCard } from '../../components/data-error-card';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import type { Category, Transaction } from '../../lib/database-helpers';
-import type { Database } from '../../lib/database.types';
 import { useHorizontalSwipe } from '../../components/mobile-ui';
 import { AppHeader } from '../../components/mobile-ui';
 import { userErrorMessage } from '../../lib/user-errors';
 
 type ReportTransaction = Pick<Transaction, 'id' | 'amount' | 'category_id' | 'date' | 'type' | 'recurring_transaction_id'>;
-type SavedFilter = Database['public']['Tables']['saved_filters']['Row'];
 const PAGE_SIZE = 1000;
 
 async function fetchReportTransactions(currentUser: string, reportStart: string, reportEnd: string) {
@@ -63,7 +61,6 @@ function ReportsPageContent() {
   const [reportMode, setReportMode] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedTrendKey, setSelectedTrendKey] = useState<string | null>(null);
   const [monthlyReview, setMonthlyReview] = useState('');
-  const [savedReports, setSavedReports] = useState<SavedFilter[]>([]);
   const [savingReview, setSavingReview] = useState(false);
   const [includeFixedExpenses, setIncludeFixedExpenses] = useState(false);
 
@@ -76,20 +73,18 @@ function ReportsPageContent() {
   useEffect(() => {
     let ignore = false;
     const fetchData = async () => {
-      const [transactionResult, categoryResult, reviewResult, savedReportResult] = await Promise.all([
+      const [transactionResult, categoryResult, reviewResult] = await Promise.all([
         fetchReportTransactions(currentUser, reportStart, reportEnd),
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase.from('monthly_reviews').select('content').eq('user_id', currentUser).eq('month', `${currentMonth}-01`).maybeSingle(),
-        supabase.from('saved_filters').select('*').eq('user_id', currentUser).eq('filter_type', 'reports').order('created_at'),
       ]);
       if (ignore) return;
-      const error = transactionResult.error || categoryResult.error || reviewResult.error || savedReportResult.error;
+      const error = transactionResult.error || categoryResult.error || reviewResult.error;
       if (error) setDataError('レポートの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
       else {
         setTransactions(transactionResult.data || []);
         setCategories(categoryResult.data || []);
         setMonthlyReview(reviewResult.data?.content || '');
-        setSavedReports(savedReportResult.data || []);
       }
       setLoading(false);
     };
@@ -185,27 +180,6 @@ function ReportsPageContent() {
       setSavingReview(false);
     }
   };
-  const saveReportCondition = async () => {
-    const name = window.prompt('保存するレポート条件の名前を入力してください');
-    if (!name?.trim()) return;
-    if (name.trim().length > 50) {
-      alert('レポート条件の名前は50文字以内で入力してください。');
-      return;
-    }
-    try {
-      const { data, error } = await supabase.from('saved_filters').insert({ user_id: currentUser, name: name.trim(), filter_type: 'reports', conditions: { reportMode, currentMonth } }).select().single();
-      if (error) alert(userErrorMessage('レポート条件の保存', error));
-      else setSavedReports((current) => [...current, data]);
-    } catch {
-      alert('レポート条件の保存に失敗しました。通信状況を確認してください。');
-    }
-  };
-  const applySavedReport = (filter: SavedFilter) => {
-    const conditions = filter.conditions as { reportMode?: 'monthly' | 'yearly'; currentMonth?: string };
-    if (conditions.reportMode) setReportMode(conditions.reportMode);
-    if (conditions.currentMonth) setSelectedDate(new Date(`${conditions.currentMonth}-01T00:00:00`));
-  };
-
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
       <AppHeader title="家計レポート" currentUser={currentUser} subtitle={`${currentMonth.replace('-', '年')}月`} />
@@ -218,8 +192,6 @@ function ReportsPageContent() {
         <span className="font-black">{reportMode === 'monthly' ? `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月` : `${selectedDate.getFullYear()}年`}</span>
         <button onClick={() => changeMonth(reportMode === 'monthly' ? 1 : 12)} className="flex min-h-11 min-w-11 items-center justify-center"><ChevronRight /></button>
       </div>
-      <div className="flex flex-wrap gap-2"><button onClick={saveReportCondition} className="flex min-h-11 items-center gap-1 rounded-xl border-2 border-slate-800 bg-indigo-100 px-3 text-xs font-black"><Bookmark className="h-4 w-4" />現在の表示を保存</button>{savedReports.map((filter) => <button key={filter.id} onClick={() => applySavedReport(filter)} className="min-h-11 rounded-xl border border-slate-400 px-3 text-xs font-black">{filter.name}</button>)}</div>
-
       {loading ? <Loader2 className="mx-auto h-8 w-8 animate-spin text-slate-400" /> : dataError ? (
         <DataErrorCard message={dataError} onRetry={() => { setLoading(true); setDataError(null); setRetryKey((current) => current + 1); }} />
       ) : reportMode === 'monthly' ? <>

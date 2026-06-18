@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight, CalendarClock, Search, RotateCcw, Bookmark, Zap } from 'lucide-react';
+import { Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight, CalendarClock, Search, RotateCcw, Zap } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
@@ -18,7 +18,6 @@ import { AmountCalculator } from '../../components/amount-calculator';
 import { useCurrentProfileId } from '../../lib/household-profiles';
 
 type Template = Database['public']['Tables']['transaction_templates']['Row'];
-type SavedFilter = Database['public']['Tables']['saved_filters']['Row'];
 type BudgetOffsetType = 'overall' | 'category' | 'special_reserve';
 
 function DashboardPageContent() {
@@ -62,7 +61,6 @@ function DashboardPageContent() {
   const [filterCategoryId, setFilterCategoryId] = useState('all');
   const [recentCategoryIds, setRecentCategoryIds] = useState<string[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const [budgetOffsetEnabled, setBudgetOffsetEnabled] = useState(false);
   const [budgetOffsetType, setBudgetOffsetType] = useState<BudgetOffsetType>('overall');
   const [budgetOffsetCategoryId, setBudgetOffsetCategoryId] = useState('');
@@ -102,7 +100,7 @@ function DashboardPageContent() {
         }
       }
 
-      const [categoryResult, transactionResult, templateResult, savedFilterResult] = await Promise.all([
+      const [categoryResult, transactionResult, templateResult] = await Promise.all([
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
@@ -112,12 +110,11 @@ function DashboardPageContent() {
           .lte('date', safeEndOfMonth)
           .order('date', { ascending: false }),
         supabase.from('transaction_templates').select('*').eq('user_id', currentUser).order('created_at'),
-        supabase.from('saved_filters').select('*').eq('user_id', currentUser).eq('filter_type', 'transactions').order('created_at'),
       ]);
 
       if (ignore) return;
 
-      const error = categoryResult.error || transactionResult.error || templateResult.error || savedFilterResult.error;
+      const error = categoryResult.error || transactionResult.error || templateResult.error;
       if (error) {
         setDataError('家計簿データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
         setLoading(false);
@@ -138,7 +135,6 @@ function DashboardPageContent() {
 
       setTransactions(transData || []);
       setTemplates(templateResult.data || []);
-      setSavedFilters(savedFilterResult.data || []);
       setLoading(false);
     };
 
@@ -310,32 +306,6 @@ function DashboardPageContent() {
     setAmount(String(template.amount));
     setDescription(template.description);
     document.getElementById('transaction-form')?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const saveCurrentFilter = async () => {
-    const name = window.prompt('検索条件の名前を入力してください');
-    if (!name?.trim()) return;
-    if (name.trim().length > 50) {
-      alert('検索条件の名前は50文字以内で入力してください。');
-      return;
-    }
-    try {
-      const { data, error } = await supabase.from('saved_filters').insert({
-        user_id: currentUser, name: name.trim(), filter_type: 'transactions',
-        conditions: { keyword, filterType, filterCategoryId },
-      }).select().single();
-      if (error) alert(userErrorMessage('検索条件の保存', error));
-      else { setSavedFilters((current) => [...current, data]); notify('検索条件を保存しました'); }
-    } catch {
-      alert('検索条件の保存に失敗しました。通信状況を確認してください。');
-    }
-  };
-
-  const applySavedFilter = (filter: SavedFilter) => {
-    const conditions = filter.conditions as { keyword?: string; filterType?: typeof filterType; filterCategoryId?: string };
-    setKeyword(conditions.keyword || '');
-    setFilterType(conditions.filterType || 'all');
-    setFilterCategoryId(conditions.filterCategoryId || 'all');
   };
 
   const getCalendarDays = () => {
@@ -533,7 +503,6 @@ function DashboardPageContent() {
                 {categories.map((category) => <option key={category.id} value={category.id}>{category.icon} {category.name}</option>)}
               </select>
             </div>
-            <div className="flex flex-wrap gap-2"><button type="button" onClick={saveCurrentFilter} className="flex min-h-11 items-center gap-1 rounded-xl border-2 border-slate-800 bg-indigo-100 px-3 text-xs font-black"><Bookmark className="h-4 w-4" />現在の条件を保存</button>{savedFilters.map((filter) => <button key={filter.id} type="button" onClick={() => applySavedFilter(filter)} className="min-h-11 rounded-xl border border-slate-400 px-3 text-xs font-black">{filter.name}</button>)}</div>
             <p className="text-right text-xs font-black text-slate-500">{filteredTransactions.length}件を表示</p>
           </section>
 
