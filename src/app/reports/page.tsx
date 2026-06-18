@@ -2,14 +2,13 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, Loader2, Save, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
 import { DataErrorCard } from '../../components/data-error-card';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import type { Category, Transaction } from '../../lib/database-helpers';
 import { useHorizontalSwipe } from '../../components/mobile-ui';
 import { AppHeader } from '../../components/mobile-ui';
-import { userErrorMessage } from '../../lib/user-errors';
 
 type ReportTransaction = Pick<Transaction, 'id' | 'amount' | 'category_id' | 'date' | 'type' | 'recurring_transaction_id'>;
 const PAGE_SIZE = 1000;
@@ -45,8 +44,6 @@ function ReportsPageContent() {
   const [retryKey, setRetryKey] = useState(0);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [reportMode, setReportMode] = useState<'monthly' | 'yearly'>('monthly');
-  const [monthlyReview, setMonthlyReview] = useState('');
-  const [savingReview, setSavingReview] = useState(false);
   const [includeFixedExpenses, setIncludeFixedExpenses] = useState(false);
 
   const currentMonth = monthKey(selectedDate);
@@ -58,18 +55,16 @@ function ReportsPageContent() {
   useEffect(() => {
     let ignore = false;
     const fetchData = async () => {
-      const [transactionResult, categoryResult, reviewResult] = await Promise.all([
+      const [transactionResult, categoryResult] = await Promise.all([
         fetchReportTransactions(currentUser, reportStart, reportEnd),
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
-        supabase.from('monthly_reviews').select('content').eq('user_id', currentUser).eq('month', `${currentMonth}-01`).maybeSingle(),
       ]);
       if (ignore) return;
-      const error = transactionResult.error || categoryResult.error || reviewResult.error;
+      const error = transactionResult.error || categoryResult.error;
       if (error) setDataError('レポートの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
       else {
         setTransactions(transactionResult.data || []);
         setCategories(categoryResult.data || []);
-        setMonthlyReview(reviewResult.data?.content || '');
       }
       setLoading(false);
     };
@@ -130,21 +125,6 @@ function ReportsPageContent() {
     () => changeMonth(reportMode === 'monthly' ? -1 : -12),
     () => changeMonth(reportMode === 'monthly' ? 1 : 12)
   );
-  const saveReview = async () => {
-    setSavingReview(true);
-    try {
-      if (monthlyReview.length > 5000) {
-        alert('振り返りは5000文字以内で入力してください。');
-        return;
-      }
-      const { error } = await supabase.from('monthly_reviews').upsert({ user_id: currentUser, month: `${currentMonth}-01`, content: monthlyReview }, { onConflict: 'household_id,user_id,month' });
-      if (error) alert(userErrorMessage('振り返りの保存', error));
-    } catch {
-      alert('振り返りの保存に失敗しました。通信状況を確認してください。');
-    } finally {
-      setSavingReview(false);
-    }
-  };
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
       <AppHeader title="家計レポート" currentUser={currentUser} subtitle={`${currentMonth.replace('-', '年')}月`} />
@@ -176,7 +156,6 @@ function ReportsPageContent() {
           <p className="mt-2 text-2xl font-black">{expenseDifference > 0 ? '+' : expenseDifference < 0 ? '-' : ''}¥{Math.abs(expenseDifference).toLocaleString()}</p>
           <p className="text-xs font-bold text-slate-500">{expenseChangePercent === null ? '前月の支出データがありません' : `前月比 ${expenseChangePercent > 0 ? '+' : ''}${expenseChangePercent}%`}</p>
         </section>
-        <section className="flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-amber-50 p-4"><h2 className="text-sm font-black">今月の振り返り</h2><textarea value={monthlyReview} onChange={(event) => setMonthlyReview(event.target.value)} rows={5} placeholder="今月よかったこと、来月気を付けたいことなど" className="rounded-xl border-2 border-slate-800 p-3 text-base" /><button onClick={saveReview} disabled={savingReview} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-amber-300 text-sm font-black disabled:opacity-50"><Save className="h-5 w-5" />{savingReview ? '保存中...' : '振り返りを保存'}</button></section>
 
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2"><div><h2 className="text-sm font-black">{includeFixedExpenses ? 'カテゴリ別支出ランキング' : '見直せる支出ランキング'}</h2><p className="text-[10px] font-bold text-slate-500">{includeFixedExpenses ? '定期取引から生成された固定費を含みます' : `固定費 ¥${monthlyFixedExpense.toLocaleString()} を除外中`}</p></div><button type="button" onClick={() => setIncludeFixedExpenses((current) => !current)} className="min-h-11 shrink-0 rounded-xl border-2 border-slate-800 bg-sky-100 px-3 text-xs font-black">{includeFixedExpenses ? '固定費を除く' : '全支出を見る'}</button></div>
