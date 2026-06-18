@@ -2,11 +2,11 @@
 
 export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, Bell, X, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
-import { parseHouseholdUser } from '../lib/household-users';
+import { parseHouseholdUser, type HouseholdUser } from '../lib/household-users';
 import type { Category, TransactionWithCategory } from '../lib/database-helpers';
 import { useCurrentProfileId, useHouseholdProfiles } from '../lib/household-profiles';
 import { userErrorMessage } from '../lib/user-errors';
@@ -24,9 +24,10 @@ function localDateString(date: Date) {
 }
 
 function HomePageContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const requestedUser = parseHouseholdUser(searchParams.get('user'));
+  const [selectedUser, setSelectedUser] = useState<HouseholdUser | null>(null);
+  const currentUser = selectedUser || requestedUser;
   const profiles = useHouseholdProfiles();
   const ownProfileId = useCurrentProfileId();
   const currentProfile = profiles.find((profile) => profile.profile_id === currentUser);
@@ -223,7 +224,8 @@ function HomePageContent() {
     if (nextUser === currentUser) return;
     setLoading(true);
     setDataError(null);
-    router.replace(`/?user=${nextUser}`);
+    setSelectedUser(nextUser);
+    window.history.replaceState(null, '', `/?user=${nextUser}`);
   };
 
   const retryFetch = () => {
