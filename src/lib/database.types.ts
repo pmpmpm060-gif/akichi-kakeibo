@@ -38,77 +38,6 @@ export type Database = {
         }
         Relationships: []
       }
-      ai_household_diagnoses: {
-        Row: {
-          actions: Json
-          concerns: Json
-          created_at: string
-          household_id: string
-          id: string
-          recommended_budgets: Json
-          score: number
-          strengths: Json
-          summary: string
-          target_month: string
-          user_id: string
-        }
-        Insert: {
-          actions?: Json
-          concerns?: Json
-          created_at?: string
-          household_id?: string
-          id?: string
-          recommended_budgets?: Json
-          score: number
-          strengths?: Json
-          summary: string
-          target_month: string
-          user_id: string
-        }
-        Update: {
-          actions?: Json
-          concerns?: Json
-          created_at?: string
-          household_id?: string
-          id?: string
-          recommended_budgets?: Json
-          score?: number
-          strengths?: Json
-          summary?: string
-          target_month?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_household_diagnoses_household_id_fkey"
-            columns: ["household_id"]
-            isOneToOne: false
-            referencedRelation: "households"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ai_request_limits: {
-        Row: {
-          request_count: number
-          request_kind: string
-          user_id: string
-          window_started_at: string
-        }
-        Insert: {
-          request_count?: number
-          request_kind: string
-          user_id: string
-          window_started_at?: string
-        }
-        Update: {
-          request_count?: number
-          request_kind?: string
-          user_id?: string
-          window_started_at?: string
-        }
-        Relationships: []
-      }
       budgets: {
         Row: {
           amount: number
@@ -868,14 +797,6 @@ export type Database = {
       can_edit_profile: {
         Args: { target_household_id: string; target_profile_id: string }
         Returns: boolean
-      }
-      can_insert_ai_diagnosis: {
-        Args: { target_household_id: string; target_user_id: string }
-        Returns: boolean
-      }
-      consume_ai_diagnosis_quota: {
-        Args: { target_month: string; target_profile_id: string }
-        Returns: string
       }
       create_special_expense_plan: {
         Args: {
