@@ -18,7 +18,7 @@ import { AmountCalculator } from '../../components/amount-calculator';
 import { useCurrentProfileId } from '../../lib/household-profiles';
 
 type Template = Database['public']['Tables']['transaction_templates']['Row'];
-type BudgetOffsetType = 'overall' | 'category' | 'special_reserve';
+type BudgetOffsetType = 'overall' | 'category';
 
 function DashboardPageContent() {
   const router = useRouter();
@@ -88,13 +88,10 @@ function DashboardPageContent() {
       const safeEndOfMonth = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
       if (canEdit) {
-        const [generateResult, specialGenerateResult] = await Promise.all([
-          supabase.rpc('generate_recurring_transactions', { target_user_id: currentUser, target_month: startOfMonth }),
-          supabase.rpc('generate_special_expense_payments', { target_user_id: currentUser, target_month: startOfMonth }),
-        ]);
+        const generateResult = await supabase.rpc('generate_recurring_transactions', { target_user_id: currentUser, target_month: startOfMonth });
         if (ignore) return;
-        if (generateResult.error || specialGenerateResult.error) {
-          setDataError('定期取引・特別支出予定の反映に失敗しました。通信状況を確認して、もう一度お試しください。');
+        if (generateResult.error) {
+          setDataError('定期取引の反映に失敗しました。通信状況を確認して、もう一度お試しください。');
           setLoading(false);
           return;
         }
@@ -444,7 +441,6 @@ function DashboardPageContent() {
                     >
                       <option value="overall">全体予算に上乗せ</option>
                       <option value="category">カテゴリ予算に上乗せ</option>
-                      <option value="special_reserve">特別支出の積立に充当</option>
                     </select>
                     {budgetOffsetType === 'category' && (
                       <select

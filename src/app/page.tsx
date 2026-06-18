@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, BarChart3, CalendarClock, CalendarRange, Bell, PiggyBank, X, Eye } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, BarChart3, CalendarClock, Bell, PiggyBank, X, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser } from '../lib/household-users';
@@ -42,7 +42,6 @@ function HomePageContent() {
   const [retryKey, setRetryKey] = useState(0);
   const [alerts, setAlerts] = useState<HouseholdAlert[]>([]);
   const [dismissingAlertKey, setDismissingAlertKey] = useState<string | null>(null);
-  const [specialExpenseSummary, setSpecialExpenseSummary] = useState({ monthlyReserve: 0, scheduledPayment: 0, reserveBalance: 0 });
 
   // シミュレーションでは、ブラウザのJSTローカル日付を使用する。
   const [daysInMonth, setDaysInMonth] = useState<number>(30);
@@ -71,19 +70,16 @@ function HomePageContent() {
       const remDays = lastDay - todayNum + 1;
 
       if (canEdit) {
-        const [generateResult, specialGenerateResult] = await Promise.all([
-          supabase.rpc('generate_recurring_transactions', { target_user_id: currentUser, target_month: startOfMonth }),
-          supabase.rpc('generate_special_expense_payments', { target_user_id: currentUser, target_month: startOfMonth }),
-        ]);
+        const generateResult = await supabase.rpc('generate_recurring_transactions', { target_user_id: currentUser, target_month: startOfMonth });
         if (ignore) return;
-        if (generateResult.error || specialGenerateResult.error) {
-          setDataError('定期取引・特別支出予定の反映に失敗しました。通信状況を確認して、もう一度お試しください。');
+        if (generateResult.error) {
+          setDataError('定期取引の反映に失敗しました。通信状況を確認して、もう一度お試しください。');
           setLoading(false);
           return;
         }
       }
 
-      const [categoryResult, transactionResult, budgetResult, previousTransactionResult, dismissedAlertResult, specialSummaryResult] = await Promise.all([
+      const [categoryResult, transactionResult, budgetResult, previousTransactionResult, dismissedAlertResult] = await Promise.all([
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
@@ -97,12 +93,11 @@ function HomePageContent() {
         }),
         supabase.from('transactions').select('amount, category_id, type').eq('user_id', currentUser).gte('date', `${previousMonth}-01`).lte('date', previousEnd),
         supabase.from('dismissed_alerts').select('alert_key').eq('user_id', currentUser),
-        supabase.rpc('get_special_expense_summary', { target_user_id: currentUser, target_month: startOfMonth }),
       ]);
 
       if (ignore) return;
 
-      const error = categoryResult.error || transactionResult.error || budgetResult.error || previousTransactionResult.error || dismissedAlertResult.error || specialSummaryResult.error;
+      const error = categoryResult.error || transactionResult.error || budgetResult.error || previousTransactionResult.error || dismissedAlertResult.error;
       if (error) {
         setDataError('ホーム画面のデータ取得に失敗しました。通信状況を確認して、もう一度お試しください。');
         setLoading(false);
@@ -126,12 +121,6 @@ function HomePageContent() {
         }, new Map<string, number>());
       const categoryBudgetOffsetTotal = Array.from(categoryBudgetOffsetMap.values()).reduce((sum, value) => sum + value, 0);
       const normalBudgetOffsetTotal = overallBudgetOffset + categoryBudgetOffsetTotal;
-      const specialSummary = specialSummaryResult.data?.[0];
-      setSpecialExpenseSummary({
-        monthlyReserve: Number(specialSummary?.monthly_reserve || 0),
-        scheduledPayment: Number(specialSummary?.scheduled_payment || 0),
-        reserveBalance: Number(specialSummary?.reserve_balance || 0),
-      });
       setTotalExpense(
         currentTransactions
           .filter((item) => item.type === 'expense')
@@ -331,11 +320,6 @@ function HomePageContent() {
         </Link>
       </div>
       {!loading && alerts.length > 0 && <section className="flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-orange-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"><h2 className="flex items-center gap-2 text-sm font-black text-orange-800"><Bell className="h-5 w-5" />家計アラート</h2>{alerts.map((item) => <div key={item.key} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700"><span className="min-w-0 flex-1">・{item.message}</span>{canEdit && <button type="button" onClick={() => dismissAlert(item)} disabled={dismissingAlertKey !== null} aria-label={`${item.message}を削除`} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 disabled:opacity-50">{dismissingAlertKey === item.key ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}</button>}</div>)}</section>}
-      {!loading && specialExpenseSummary.monthlyReserve > 0 && <Link href={`/special-expenses?user=${currentUser}`} className="flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-cyan-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
-        <h2 className="flex items-center gap-2 text-sm font-black"><CalendarRange className="h-5 w-5 text-cyan-700" />特別支出の積立</h2>
-        <div className="grid grid-cols-3 gap-2 text-center"><span className="rounded-xl bg-white p-2"><span className="block text-[10px] font-bold text-slate-500">毎月の目安</span><span className="text-xs font-black">¥{specialExpenseSummary.monthlyReserve.toLocaleString()}</span></span><span className="rounded-xl bg-white p-2"><span className="block text-[10px] font-bold text-slate-500">今月支払い</span><span className="text-xs font-black">¥{specialExpenseSummary.scheduledPayment.toLocaleString()}</span></span><span className="rounded-xl bg-white p-2"><span className="block text-[10px] font-bold text-slate-500">積立残高</span><span className={`text-xs font-black ${specialExpenseSummary.reserveBalance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>¥{specialExpenseSummary.reserveBalance.toLocaleString()}</span></span></div>
-        {hasBudget && <p className={`rounded-xl bg-white px-3 py-2 text-xs font-black ${remainingBudget - specialExpenseSummary.monthlyReserve < 0 ? 'text-rose-600' : 'text-cyan-800'}`}>今月の積立分を確保した後に使える通常予算：¥{(remainingBudget - specialExpenseSummary.monthlyReserve).toLocaleString()}</p>}
-      </Link>}
 
       {/* 押下するとカテゴリ別の支出予算案内を展開する。 */}
       {!dataError && (
