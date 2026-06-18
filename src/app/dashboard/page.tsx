@@ -305,19 +305,6 @@ function DashboardPageContent() {
     document.getElementById('transaction-form')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const getCalendarDays = () => {
-    const start = new Date(jstYear, currentDate.getMonth(), 1);
-    const end = new Date(jstYear, currentDate.getMonth() + 1, 0);
-    const days = [];
-    
-    const startDayOfWeek = start.getDay();
-    for (let i = 0; i < startDayOfWeek; i++) { days.push(null); }
-    for (let i = 1; i <= end.getDate(); i++) { days.push(i); }
-    return days;
-  };
-
-  const calendarDays = getCalendarDays();
-
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
       <AppHeader title="家計簿を付ける" currentUser={currentUser} />
@@ -502,92 +489,29 @@ function DashboardPageContent() {
             <p className="text-right text-xs font-black text-slate-500">{filteredTransactions.length}件を表示</p>
           </section>
 
-          {/* カレンダー形式の取引履歴 */}
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">今月の記録カレンダー 📅</p>
-            
-            <div className="bg-white border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-              <div className="grid grid-cols-7 gap-1 text-center text-xs font-black mb-2">
-                <span className="text-rose-500 bg-rose-50 py-0.5 rounded-md">日</span>
-                <span className="text-slate-500">月</span>
-                <span className="text-slate-500">火</span>
-                <span className="text-slate-500">水</span>
-                <span className="text-slate-500">木</span>
-                <span className="text-slate-500">金</span>
-                <span className="text-sky-500 bg-sky-50 py-0.5 rounded-md">土</span>
-              </div>
-              
-              <div className="grid grid-cols-7 gap-1.5">
-                {calendarDays.map((day, index) => {
-                  if (day === null) return <div key={`empty-${index}`} />;
-                  
-                  const formattedDay = String(day).padStart(2, '0');
-                  const targetDateStr = `${yearMonth}-${formattedDay}`;
-                  
-                  const isToday = targetDateStr === todayStr;
-                  const dayOfWeek = new Date(jstYear, currentDate.getMonth(), day).getDay();
-
-                  const dayTransactions = filteredTransactions.filter(t => t.date === targetDateStr);
-                  const dayExpense = dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-                  const dayIncome = dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-
-                  return (
-                    <button
-                      type="button"
-                      key={`day-${day}`}
-                      onClick={() => { setSelectedDate(targetDateStr); setEditingTransaction(null); }}
-                      aria-label={`${day}日、記録${dayTransactions.length}件`}
-                      className={`aspect-square min-h-11 border-2 rounded-xl flex flex-col items-center justify-center gap-1 p-1 active:bg-amber-100 transition-all relative
-                        ${isToday ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-300 ring-offset-1' : 'border-slate-200'}
-                        ${selectedDate === targetDateStr ? 'bg-amber-200 border-slate-800' : ''}
-                        ${!isToday && dayOfWeek === 0 ? 'bg-rose-50/30' : ''}
-                        ${!isToday && dayOfWeek === 6 ? 'bg-sky-50/30' : ''}
-                      `}
-                    >
-                      <span className={`text-xs font-black 
-                        ${dayOfWeek === 0 ? 'text-rose-600' : dayOfWeek === 6 ? 'text-sky-600' : 'text-slate-700'}
-                        ${isToday ? 'bg-amber-400 text-slate-900 px-1 rounded-md text-[10px]' : ''}
-                      `}>
-                        {day}
-                      </span>
-                      
-                      <div className="flex h-2 items-center justify-center gap-1">
-                        {dayExpense > 0 && <span className="h-2 w-2 rounded-full bg-rose-400" />}
-                        {dayIncome > 0 && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {selectedDate && (
-              <div className="flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-amber-50 p-3 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
-                <p className="px-1 text-sm font-black text-slate-800">
-                  {selectedDate.slice(5).replace('-', '月')}日 の記録
-                </p>
-                {filteredTransactions.filter((transaction) => transaction.date === selectedDate).length === 0 ? (
-                  <p className="py-4 text-center text-sm font-bold text-slate-400">この日の記録はありません</p>
-                ) : (
-                  filteredTransactions.filter((transaction) => transaction.date === selectedDate).map((transaction) => (
-                    <button
-                      key={transaction.id}
-                      type="button"
-                      onClick={() => setEditingTransaction(transaction)}
-                      className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border-2 border-slate-800 bg-white p-3 text-left"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-xs font-black text-slate-500">{transaction.categories?.name || '未分類'}</span>
-                        <span className="block truncate text-sm font-bold text-slate-800">{transaction.description || 'メモなし'}</span>
-                      </span>
-                      <span className="flex shrink-0 items-center gap-1"><span className={`text-sm font-black ${transaction.type === 'expense' ? 'text-rose-500' : 'text-emerald-600'}`}>
-                        {transaction.type === 'expense' ? '-' : '+'}¥{transaction.amount.toLocaleString()}
-                      </span></span>
-                    </button>
-                  ))
-                )}
-              </div>
+          <section className="flex flex-col gap-2">
+            <p className="px-1 text-xs font-black uppercase tracking-widest text-slate-400">記録一覧</p>
+            {filteredTransactions.length === 0 ? (
+              <p className="rounded-2xl border-2 border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-400">該当する記録はありません。</p>
+            ) : (
+              filteredTransactions.map((transaction) => (
+                <button
+                  key={transaction.id}
+                  type="button"
+                  onClick={() => { setSelectedDate(transaction.date); setEditingTransaction(transaction); }}
+                  className="flex min-h-16 items-center justify-between gap-3 rounded-2xl border-2 border-slate-800 bg-white p-3 text-left shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[10px] font-black text-slate-400">{transaction.date.slice(5).replace('-', '月')}日 ・ {transaction.categories?.name || '未分類'}</span>
+                    <span className="block truncate text-sm font-bold text-slate-800">{transaction.description || 'メモなし'}</span>
+                  </span>
+                  <span className={`shrink-0 text-sm font-black ${transaction.type === 'expense' ? 'text-rose-500' : 'text-emerald-600'}`}>
+                    {transaction.type === 'expense' ? '-' : '+'}¥{transaction.amount.toLocaleString()}
+                  </span>
+                </button>
+              ))
             )}
-          </div>
+          </section>
         </>
       )}
 

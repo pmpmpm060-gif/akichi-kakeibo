@@ -8,9 +8,10 @@ import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, Calend
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser } from '../lib/household-users';
-import type { Category } from '../lib/database-helpers';
+import type { Category, TransactionWithCategory } from '../lib/database-helpers';
 import { useCurrentProfileId, useHouseholdProfiles } from '../lib/household-profiles';
 import { userErrorMessage } from '../lib/user-errors';
+import { TransactionCalendar } from '../components/transaction-calendar';
 
 type BudgetSummaryItem = Category & {
   actual: number;
@@ -18,6 +19,10 @@ type BudgetSummaryItem = Category & {
   carryover: number;
 };
 type HouseholdAlert = { key: string; message: string };
+
+function localDateString(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 function HomePageContent() {
   const router = useRouter();
@@ -42,6 +47,8 @@ function HomePageContent() {
   const [retryKey, setRetryKey] = useState(0);
   const [alerts, setAlerts] = useState<HouseholdAlert[]>([]);
   const [dismissingAlertKey, setDismissingAlertKey] = useState<string | null>(null);
+  const [calendarTransactions, setCalendarTransactions] = useState<TransactionWithCategory[]>([]);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
 
   // シミュレーションでは、ブラウザのJSTローカル日付を使用する。
   const [daysInMonth, setDaysInMonth] = useState<number>(30);
@@ -83,10 +90,11 @@ function HomePageContent() {
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
-          .select('amount, category_id, type, recurring_transaction_id, budget_offset_type, budget_offset_category_id')
+          .select('*, categories!transactions_category_id_fkey(name, type, icon)')
           .eq('user_id', currentUser)
           .gte('date', startOfMonth)
-          .lte('date', safeEndOfMonth),
+          .lte('date', safeEndOfMonth)
+          .order('date', { ascending: false }),
         supabase.rpc('get_effective_budgets', {
           target_user_id: currentUser,
           target_month: startOfMonth,
@@ -108,6 +116,8 @@ function HomePageContent() {
       setDaysInMonth(lastDay);
       setRemainingDays(remDays > 0 ? remDays : 1);
       const currentTransactions = transactionResult.data || [];
+      setCalendarTransactions(currentTransactions as TransactionWithCategory[]);
+      setSelectedCalendarDate(localDateString(now));
       const incomeBudgetOffsets = currentTransactions.filter((item) => item.type === 'income' && item.budget_offset_type !== 'none');
       const overallBudgetOffset = incomeBudgetOffsets
         .filter((item) => item.budget_offset_type === 'overall')
@@ -261,6 +271,8 @@ function HomePageContent() {
 
   const remainingBudget = totalBudget - totalExpense;
   const isOverBudget = remainingBudget < 0;
+  const currentMonthDate = new Date();
+  const todayStr = localDateString(currentMonthDate);
 
   // 実際の残予算を、月内で均等に支出した場合の理想値と比較する。
   const dailyRemaining = !isOverBudget ? Math.floor(remainingBudget / remainingDays) : 0;
@@ -414,6 +426,17 @@ function HomePageContent() {
             </div>
           )}
         </div>
+      )}
+
+      {/* 当月の記録カレンダー */}
+      {!loading && !dataError && (
+        <TransactionCalendar
+          currentDate={currentMonthDate}
+          transactions={calendarTransactions}
+          todayStr={todayStr}
+          selectedDate={selectedCalendarDate}
+          onSelectDate={setSelectedCalendarDate}
+        />
       )}
 
       {/* 支出予算の全体状況と消化ペース */}
