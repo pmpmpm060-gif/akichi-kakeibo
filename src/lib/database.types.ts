@@ -752,6 +752,8 @@ export type Database = {
       transactions: {
         Row: {
           amount: number
+          budget_offset_category_id: string | null
+          budget_offset_type: string
           category_id: string
           created_at: string
           date: string
@@ -765,6 +767,8 @@ export type Database = {
         }
         Insert: {
           amount: number
+          budget_offset_category_id?: string | null
+          budget_offset_type?: string
           category_id: string
           created_at?: string
           date: string
@@ -778,6 +782,8 @@ export type Database = {
         }
         Update: {
           amount?: number
+          budget_offset_category_id?: string | null
+          budget_offset_type?: string
           category_id?: string
           created_at?: string
           date?: string
@@ -790,6 +796,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_budget_offset_category_id_fkey"
+            columns: ["budget_offset_category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transactions_category_id_fkey"
             columns: ["category_id"]
@@ -878,6 +891,8 @@ export type Database = {
       create_transaction_with_tags: {
         Args: {
           target_amount: number
+          target_budget_offset_category_id?: string | null
+          target_budget_offset_type?: string
           target_category_id: string
           target_date: string
           target_description: string

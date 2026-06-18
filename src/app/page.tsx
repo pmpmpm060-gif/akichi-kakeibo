@@ -31,6 +31,7 @@ function HomePageContent() {
   const [totalExpense, setTotalExpense] = useState<number>(0);
   const [totalBudget, setTotalBudget] = useState<number>(0);
   const [totalCarryover, setTotalCarryover] = useState<number>(0);
+  const [totalBudgetOffset, setTotalBudgetOffset] = useState<number>(0);
   const [hasBudget, setHasBudget] = useState(false);
   const [budgetSummary, setBudgetSummary] = useState<BudgetSummaryItem[]>([]);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
@@ -86,7 +87,7 @@ function HomePageContent() {
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
-          .select('amount, category_id, type, recurring_transaction_id')
+          .select('amount, category_id, type, recurring_transaction_id, budget_offset_type, budget_offset_category_id')
           .eq('user_id', currentUser)
           .gte('date', startOfMonth)
           .lte('date', safeEndOfMonth),
@@ -111,6 +112,20 @@ function HomePageContent() {
       setCurrentDay(todayNum);
       setDaysInMonth(lastDay);
       setRemainingDays(remDays > 0 ? remDays : 1);
+      const currentTransactions = transactionResult.data || [];
+      const incomeBudgetOffsets = currentTransactions.filter((item) => item.type === 'income' && item.budget_offset_type !== 'none');
+      const overallBudgetOffset = incomeBudgetOffsets
+        .filter((item) => item.budget_offset_type === 'overall')
+        .reduce((sum, item) => sum + Number(item.amount), 0);
+      const categoryBudgetOffsetMap = incomeBudgetOffsets
+        .filter((item) => item.budget_offset_type === 'category' && item.budget_offset_category_id)
+        .reduce<Map<string, number>>((map, item) => {
+          const categoryId = item.budget_offset_category_id || '';
+          map.set(categoryId, (map.get(categoryId) || 0) + Number(item.amount));
+          return map;
+        }, new Map<string, number>());
+      const categoryBudgetOffsetTotal = Array.from(categoryBudgetOffsetMap.values()).reduce((sum, value) => sum + value, 0);
+      const normalBudgetOffsetTotal = overallBudgetOffset + categoryBudgetOffsetTotal;
       const specialSummary = specialSummaryResult.data?.[0];
       setSpecialExpenseSummary({
         monthlyReserve: Number(specialSummary?.monthly_reserve || 0),
@@ -118,7 +133,7 @@ function HomePageContent() {
         reserveBalance: Number(specialSummary?.reserve_balance || 0),
       });
       setTotalExpense(
-        (transactionResult.data || [])
+        currentTransactions
           .filter((item) => item.type === 'expense')
           .reduce((sum, item) => sum + Number(item.amount), 0)
       );
@@ -126,8 +141,9 @@ function HomePageContent() {
         // 収入予算は目標額であり、支出可能額ではないため合計から除外する。
         (budgetResult.data || [])
           .filter((item) => item.category_type === 'expense')
-          .reduce((sum, item) => sum + Number(item.amount), 0)
+          .reduce((sum, item) => sum + Number(item.amount), 0) + normalBudgetOffsetTotal
       );
+      setTotalBudgetOffset(normalBudgetOffsetTotal);
       setTotalCarryover(
         (budgetResult.data || [])
           .filter((item) => item.category_type === 'expense')
@@ -138,7 +154,7 @@ function HomePageContent() {
           (item) =>
             item.category_type === 'expense'
             && (Number(item.base_amount) !== 0 || Number(item.carryover_amount) !== 0)
-        )
+        ) || normalBudgetOffsetTotal > 0
       );
       setBudgetSummary(
         // トップ画面の予算案内は、支出カテゴリだけを対象にする。
@@ -154,11 +170,12 @@ function HomePageContent() {
                 && transaction.type === category.type
               )
               .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+            const categoryBudgetOffset = categoryBudgetOffsetMap.get(category.id) || 0;
 
             return {
               ...category,
               actual,
-              budget: Number(effectiveBudget?.amount || 0),
+              budget: Number(effectiveBudget?.amount || 0) + categoryBudgetOffset,
               carryover: Number(effectiveBudget?.carryover_amount || 0),
             };
           })
@@ -167,10 +184,10 @@ function HomePageContent() {
       const dismissedAlertKeys = new Set((dismissedAlertResult.data || []).map((item) => item.alert_key));
       const nextAlerts: HouseholdAlert[] = [];
       (categoryResult.data || []).filter((category) => category.type === 'expense').forEach((category) => {
-        const currentCategoryExpenses = (transactionResult.data || []).filter((item) => item.category_id === category.id && item.type === 'expense');
+        const currentCategoryExpenses = currentTransactions.filter((item) => item.category_id === category.id && item.type === 'expense');
         const currentActual = currentCategoryExpenses.reduce((sum, item) => sum + Number(item.amount), 0);
         const previousActual = (previousTransactionResult.data || []).filter((item) => item.category_id === category.id && item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
-        const budget = Number((budgetResult.data || []).find((item) => item.category_id === category.id)?.amount || 0);
+        const budget = Number((budgetResult.data || []).find((item) => item.category_id === category.id)?.amount || 0) + (categoryBudgetOffsetMap.get(category.id) || 0);
         // 定期取引由来の固定費だけなら到達通知は不要だが、超過時は見逃さない。
         const hasVariableExpense = currentCategoryExpenses.some((item) => item.recurring_transaction_id === null);
         if (budget > 0 && currentActual > budget) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:budget-over`, message: `${category.name}が予算を超過しています` });
@@ -231,12 +248,21 @@ function HomePageContent() {
     if (dismissingAlertKey) return;
     setDismissingAlertKey(targetAlert.key);
     try {
-      const { error } = await supabase.from('dismissed_alerts').upsert({
+      const { error } = await supabase.from('dismissed_alerts').insert({
         user_id: currentUser,
         alert_key: targetAlert.key,
-      }, { onConflict: 'household_id,user_id,alert_key' });
-      if (error) alert(userErrorMessage('アラートの削除', error));
-      else setAlerts((current) => current.filter((item) => item.key !== targetAlert.key));
+      });
+      if (error) {
+        if (error.code === '23505') {
+          setAlerts((current) => current.filter((item) => item.key !== targetAlert.key));
+        } else if (error.code === 'P0001') {
+          alert('このプロフィールではアラートを削除できません。本人のログインでお試しください。');
+        } else {
+          alert(userErrorMessage('アラートの削除', error));
+        }
+      } else {
+        setAlerts((current) => current.filter((item) => item.key !== targetAlert.key));
+      }
     } catch {
       alert('アラートの削除に失敗しました。通信状況を確認して、もう一度お試しください。');
     } finally {
@@ -418,6 +444,11 @@ function HomePageContent() {
                 {totalCarryover !== 0 && (
                   <span className={`text-[10px] font-black ${totalCarryover > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                     繰越: {totalCarryover > 0 ? '+' : ''}¥{totalCarryover.toLocaleString()}
+                  </span>
+                )}
+                {totalBudgetOffset > 0 && (
+                  <span className="text-[10px] font-black text-emerald-700">
+                    臨時収入の上乗せ: +¥{totalBudgetOffset.toLocaleString()}
                   </span>
                 )}
               </div>

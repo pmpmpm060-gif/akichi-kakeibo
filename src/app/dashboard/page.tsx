@@ -20,6 +20,7 @@ import { useCurrentProfileId } from '../../lib/household-profiles';
 type TagRow = Database['public']['Tables']['tags']['Row'];
 type Template = Database['public']['Tables']['transaction_templates']['Row'];
 type SavedFilter = Database['public']['Tables']['saved_filters']['Row'];
+type BudgetOffsetType = 'overall' | 'category' | 'special_reserve';
 
 function DashboardPageContent() {
   const router = useRouter();
@@ -67,6 +68,9 @@ function DashboardPageContent() {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [filterTagId, setFilterTagId] = useState('all');
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const [budgetOffsetEnabled, setBudgetOffsetEnabled] = useState(false);
+  const [budgetOffsetType, setBudgetOffsetType] = useState<BudgetOffsetType>('overall');
+  const [budgetOffsetCategoryId, setBudgetOffsetCategoryId] = useState('');
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithCategory | null>(null);
@@ -107,7 +111,7 @@ function DashboardPageContent() {
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
-          .select('*, categories(name, type, icon)')
+          .select('*, categories!transactions_category_id_fkey(name, type, icon)')
           .eq('user_id', currentUser)
           .gte('date', startOfMonth)
           .lte('date', safeEndOfMonth)
@@ -172,11 +176,14 @@ function DashboardPageContent() {
     setRetryKey((current) => current + 1);
   };
 
+  const selectedCategory = categories.find((category) => category.id === categoryId);
+  const expenseCategories = categories.filter((category) => category.type === 'expense');
+  const canApplyBudgetOffset = selectedCategory?.type === 'income';
+
   const handleAddTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isAddingTransaction || !amount || !categoryId) return;
 
-    const selectedCategory = categories.find(c => c.id === categoryId);
     if (!selectedCategory) return;
 
     const parsedAmount = Number(amount);
@@ -184,6 +191,20 @@ function DashboardPageContent() {
       alert('金額は1円以上の整数で入力してください。');
       return;
     }
+
+    let targetBudgetOffsetType: 'none' | BudgetOffsetType = 'none';
+    let targetBudgetOffsetCategoryId: string | null = null;
+    if (canApplyBudgetOffset && budgetOffsetEnabled) {
+      targetBudgetOffsetType = budgetOffsetType;
+      if (budgetOffsetType === 'category') {
+        if (!budgetOffsetCategoryId || !expenseCategories.some((category) => category.id === budgetOffsetCategoryId)) {
+          alert('上乗せ先の支出カテゴリを選んでください。');
+          return;
+        }
+        targetBudgetOffsetCategoryId = budgetOffsetCategoryId;
+      }
+    }
+
     setIsAddingTransaction(true);
     try {
       // 取引とタグはRPC内の1トランザクションで保存し、片方だけ残る状態を防ぐ。
@@ -194,12 +215,14 @@ function DashboardPageContent() {
         target_date: date,
         target_description: description,
         target_tag_ids: selectedTagIds,
+        target_budget_offset_type: targetBudgetOffsetType,
+        target_budget_offset_category_id: targetBudgetOffsetCategoryId,
       });
       if (error) {
         alert(userErrorMessage('登録', error));
         return;
       }
-      const { data: createdData, error: fetchError } = await supabase.from('transactions').select('*, categories(name, type, icon)').eq('id', transactionId).single();
+      const { data: createdData, error: fetchError } = await supabase.from('transactions').select('*, categories!transactions_category_id_fkey(name, type, icon)').eq('id', transactionId).single();
       if (fetchError) {
         alert('登録しましたが、画面への反映に失敗しました。再読み込みしてください。');
         return;
@@ -210,6 +233,9 @@ function DashboardPageContent() {
       setAmount("");
       setDescription("");
       setSelectedTagIds([]);
+      setBudgetOffsetEnabled(false);
+      setBudgetOffsetType('overall');
+      setBudgetOffsetCategoryId('');
       setRecentCategoryIds((current) => [categoryId, ...current.filter((id) => id !== categoryId)].slice(0, 4));
       notify('家計簿に記録しました');
       router.refresh();
@@ -242,6 +268,8 @@ function DashboardPageContent() {
           description: editingTransaction.description,
           category_id: editingTransaction.category_id,
           type: targetCategory.type,
+          budget_offset_type: targetCategory.type === 'income' ? editingTransaction.budget_offset_type : 'none',
+          budget_offset_category_id: targetCategory.type === 'income' ? editingTransaction.budget_offset_category_id : null,
         })
         .eq('id', editingTransaction.id);
 
@@ -423,7 +451,15 @@ function DashboardPageContent() {
               </div>
               <div className="flex min-w-0 flex-col gap-1">
                 <label className="text-xs font-black text-emerald-900 pl-1">分類</label>
-                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="min-h-12 min-w-0 max-w-full rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-base font-bold">
+                <select
+                  value={categoryId}
+                  onChange={(e) => {
+                    const nextCategory = categories.find((category) => category.id === e.target.value);
+                    setCategoryId(e.target.value);
+                    if (nextCategory?.type !== 'income') setBudgetOffsetEnabled(false);
+                  }}
+                  className="min-h-12 min-w-0 max-w-full rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-base font-bold"
+                >
                   {categories.map(c => (
                     <option key={c.id} value={c.id}>{c.icon || (c.type === 'expense' ? '💸' : '💰')} {c.name}</option>
                   ))}
@@ -435,6 +471,48 @@ function DashboardPageContent() {
               <label className="text-xs font-black text-emerald-900 pl-1">いくら？</label>
               <div className="flex gap-2"><input type="number" inputMode="numeric" enterKeyHint="next" min="1" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); descriptionInputRef.current?.focus(); } }} placeholder="金額を入力" className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-black" /><AmountCalculator value={amount} min={1} onApply={(result) => setAmount(String(result))} disabled={isAddingTransaction} /></div>
             </div>
+
+            {canApplyBudgetOffset && (
+              <div className="flex flex-col gap-3 rounded-2xl border-2 border-emerald-800 bg-white p-3">
+                <label className="flex items-start gap-2 text-xs font-black text-emerald-900">
+                  <input
+                    type="checkbox"
+                    checked={budgetOffsetEnabled}
+                    onChange={(event) => setBudgetOffsetEnabled(event.target.checked)}
+                    className="mt-1 h-5 w-5 rounded border-2 border-slate-800"
+                  />
+                  <span className="min-w-0">
+                    この収入を当月予算に上乗せする
+                    <span className="mt-1 block text-[10px] font-bold text-slate-500">給与はチェックしない、臨時収入だけ使う想定です。</span>
+                  </span>
+                </label>
+                {budgetOffsetEnabled && (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <select
+                      value={budgetOffsetType}
+                      onChange={(event) => setBudgetOffsetType(event.target.value as BudgetOffsetType)}
+                      className="min-h-12 rounded-xl border-2 border-slate-800 bg-white px-3 text-base font-bold"
+                    >
+                      <option value="overall">全体予算に上乗せ</option>
+                      <option value="category">カテゴリ予算に上乗せ</option>
+                      <option value="special_reserve">特別支出の積立に充当</option>
+                    </select>
+                    {budgetOffsetType === 'category' && (
+                      <select
+                        value={budgetOffsetCategoryId}
+                        onChange={(event) => setBudgetOffsetCategoryId(event.target.value)}
+                        className="min-h-12 rounded-xl border-2 border-slate-800 bg-white px-3 text-base font-bold"
+                      >
+                        <option value="">上乗せ先を選択</option>
+                        {expenseCategories.map((category) => (
+                          <option key={category.id} value={category.id}>{category.icon || '💸'} {category.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-black text-emerald-900 pl-1">メモ（何に使った？）</label>
