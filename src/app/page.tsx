@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, Bell, X, Eye } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, Bell, X, Eye, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser, type HouseholdUser } from '../lib/household-users';
@@ -11,6 +11,8 @@ import type { Category, TransactionWithCategory } from '../lib/database-helpers'
 import { useCurrentProfileId, useHouseholdProfiles } from '../lib/household-profiles';
 import { userErrorMessage } from '../lib/user-errors';
 import { TransactionCalendar } from '../components/transaction-calendar';
+import { AmountCalculator } from '../components/amount-calculator';
+import { useConfirm } from '../components/mobile-ui';
 
 type BudgetSummaryItem = Category & {
   actual: number;
@@ -32,6 +34,7 @@ function HomePageContent() {
   const ownProfileId = useCurrentProfileId();
   const currentProfile = profiles.find((profile) => profile.profile_id === currentUser);
   const canEdit = ownProfileId === currentUser;
+  const confirmAction = useConfirm();
 
   const [totalExpense, setTotalExpense] = useState<number>(0);
   const [totalBudget, setTotalBudget] = useState<number>(0);
@@ -39,6 +42,7 @@ function HomePageContent() {
   const [totalCarryover, setTotalCarryover] = useState<number>(0);
   const [totalBudgetOffset, setTotalBudgetOffset] = useState<number>(0);
   const [hasBudget, setHasBudget] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [budgetSummary, setBudgetSummary] = useState<BudgetSummaryItem[]>([]);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isSimulationOpen, setIsSimulationOpen] = useState(false);
@@ -50,6 +54,9 @@ function HomePageContent() {
   const [dismissingAlertKey, setDismissingAlertKey] = useState<string | null>(null);
   const [calendarTransactions, setCalendarTransactions] = useState<TransactionWithCategory[]>([]);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<TransactionWithCategory | null>(null);
+  const [isUpdatingTransaction, setIsUpdatingTransaction] = useState(false);
+  const [deletingTransactionId, setDeletingTransactionId] = useState<string | null>(null);
 
   // シミュレーションでは、ブラウザのJSTローカル日付を使用する。
   const [daysInMonth, setDaysInMonth] = useState<number>(30);
@@ -117,6 +124,7 @@ function HomePageContent() {
       setDaysInMonth(lastDay);
       setRemainingDays(remDays > 0 ? remDays : 1);
       const currentTransactions = transactionResult.data || [];
+      setCategories(categoryResult.data || []);
       setCalendarTransactions(currentTransactions as TransactionWithCategory[]);
       setSelectedCalendarDate(localDateString(now));
       const incomeBudgetOffsets = currentTransactions.filter((item) => item.type === 'income' && item.budget_offset_type !== 'none');
@@ -275,6 +283,72 @@ function HomePageContent() {
       alert('アラートの削除に失敗しました。通信状況を確認して、もう一度お試しください。');
     } finally {
       setDismissingAlertKey(null);
+    }
+  };
+
+  const refreshHomeData = () => {
+    setLoading(true);
+    setDataError(null);
+    setRetryKey((current) => current + 1);
+  };
+
+  const handleUpdateTransaction = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isUpdatingTransaction || !editingTransaction || !canEdit) return;
+
+    const selectedCategory = categories.find((category) => category.id === editingTransaction.category_id);
+    if (!selectedCategory) return;
+
+    const parsedAmount = Number(editingTransaction.amount);
+    if (!Number.isSafeInteger(parsedAmount) || parsedAmount <= 0) {
+      alert('金額は1円以上の整数で入力してください。');
+      return;
+    }
+
+    setIsUpdatingTransaction(true);
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          amount: parsedAmount,
+          description: editingTransaction.description,
+          category_id: editingTransaction.category_id,
+          type: selectedCategory.type,
+          budget_offset_type: selectedCategory.type === 'income' ? editingTransaction.budget_offset_type : 'none',
+          budget_offset_category_id: selectedCategory.type === 'income' ? editingTransaction.budget_offset_category_id : null,
+        })
+        .eq('id', editingTransaction.id);
+
+      if (error) {
+        alert(userErrorMessage('修正', error));
+        return;
+      }
+      setEditingTransaction(null);
+      refreshHomeData();
+    } catch {
+      alert('修正に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setIsUpdatingTransaction(false);
+    }
+  };
+
+  const handleDeleteTransaction = async (id: string) => {
+    if (deletingTransactionId || !canEdit) return;
+    if (!await confirmAction('この記録を削除しますか？')) return;
+
+    setDeletingTransactionId(id);
+    try {
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (error) {
+        alert(userErrorMessage('削除', error));
+        return;
+      }
+      setEditingTransaction(null);
+      refreshHomeData();
+    } catch {
+      alert('削除に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setDeletingTransactionId(null);
     }
   };
 
@@ -508,6 +582,7 @@ function HomePageContent() {
             todayStr={todayStr}
             selectedDate={selectedCalendarDate}
             onSelectDate={setSelectedCalendarDate}
+            onTransactionClick={canEdit ? setEditingTransaction : undefined}
           />
 
           {/* 月末まで均等に支出する場合とのペース比較 */}
@@ -570,6 +645,83 @@ function HomePageContent() {
       <p className="text-center text-xs font-bold text-slate-400 mt-4">
         現在のモード: {currentProfile?.display_name || (currentUser === 'user_a' ? 'ママ' : 'パパ')}データ 🚀
       </p>
+
+      {editingTransaction && (
+        <div onClick={() => setEditingTransaction(null)} className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">
+          <div onClick={(event) => event.stopPropagation()} className="mobile-sheet w-full max-w-md overflow-hidden rounded-t-3xl border-4 border-slate-800 bg-white shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] animate-in fade-in slide-in-from-bottom-4 duration-200 sm:rounded-3xl">
+            <div className="flex items-center justify-between border-b-2 border-slate-800 bg-amber-100 p-4">
+              <span className="text-base font-black text-slate-800">
+                {editingTransaction.date.slice(5).replace('-', '月')}日 の記録
+              </span>
+              <button type="button" onClick={() => setEditingTransaction(null)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border-2 border-slate-800 bg-white">
+                <X className="h-4 w-4 text-slate-800" strokeWidth={3} />
+              </button>
+            </div>
+
+            <div className="flex max-h-[calc(90dvh-76px)] flex-col gap-4 overflow-y-auto p-4">
+              <form onSubmit={handleUpdateTransaction} className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-black text-slate-500">分類</label>
+                  <select
+                    value={editingTransaction.category_id}
+                    onChange={(event) => setEditingTransaction({ ...editingTransaction, category_id: event.target.value })}
+                    className="min-h-12 w-full rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-base font-bold"
+                  >
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>{category.icon || (category.type === 'expense' ? '💸' : '💰')} {category.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-black text-slate-500">いくら？</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={editingTransaction.amount}
+                      onChange={(event) => setEditingTransaction({ ...editingTransaction, amount: Number(event.target.value) })}
+                      className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-4 py-2 text-base font-black"
+                    />
+                    <AmountCalculator value={editingTransaction.amount} min={1} onApply={(result) => setEditingTransaction({ ...editingTransaction, amount: result })} disabled={isUpdatingTransaction} />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-black text-slate-500">メモ</label>
+                  <input
+                    type="text"
+                    value={editingTransaction.description}
+                    maxLength={500}
+                    onChange={(event) => setEditingTransaction({ ...editingTransaction, description: event.target.value })}
+                    className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2 text-base font-bold"
+                  />
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button type="button" onClick={() => setEditingTransaction(null)} className="min-h-12 flex-1 rounded-xl border-2 border-slate-800 bg-slate-100 py-2.5 text-sm font-black">
+                    戻る
+                  </button>
+                  <button type="submit" disabled={isUpdatingTransaction} className="flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-slate-800 bg-slate-900 py-2.5 text-sm font-black text-white disabled:opacity-60">
+                    {isUpdatingTransaction
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> 保存中...</>
+                      : '変更を保存する！'}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteTransaction(editingTransaction.id)}
+                  disabled={deletingTransactionId !== null || isUpdatingTransaction}
+                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-rose-300 bg-rose-50 text-sm font-black text-rose-600 disabled:opacity-50"
+                >
+                  {deletingTransactionId === editingTransaction.id
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <Trash2 className="h-4 w-4" />}
+                  この記録を削除する
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

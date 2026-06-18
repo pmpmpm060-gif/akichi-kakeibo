@@ -8,7 +8,7 @@ import { useCurrentProfileId } from '../lib/household-profiles';
 
 const items = [
   { label: 'ホーム', path: '/', icon: Home },
-  { label: '履歴', path: '/dashboard', hash: '#transaction-history', icon: List },
+  { label: '履歴', path: '/dashboard', icon: List },
   { label: '記録する', path: '/dashboard', hash: '#transaction-form', icon: Plus, primary: true },
   { label: '予算', path: '/budgets', icon: PiggyBank },
   { label: 'その他', path: '/more', icon: Menu },
