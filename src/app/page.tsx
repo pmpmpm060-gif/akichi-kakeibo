@@ -3,8 +3,7 @@
 export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, BarChart3, CalendarClock, Bell, PiggyBank, X, Eye } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, Bell, X, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser } from '../lib/household-users';
@@ -320,17 +319,6 @@ function HomePageContent() {
       {dataError && <DataErrorCard message={dataError} onRetry={retryFetch} />}
       {ownProfileId !== undefined && !canEdit && <p className="flex items-center gap-2 rounded-2xl border-2 border-slate-800 bg-sky-50 px-3 py-2 text-xs font-black text-sky-800"><Eye className="h-4 w-4 shrink-0" />このプロフィールは参照モードです。変更は本人のログインで行ってください。</p>}
 
-      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
-        <Link href={`/reports?user=${currentUser}`} className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border-2 border-slate-800 bg-indigo-100 px-1 text-center text-[10px] font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-          <BarChart3 className="h-5 w-5 shrink-0" /><span>月次レポート</span>
-        </Link>
-        <Link href={`/recurring?user=${currentUser}`} className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border-2 border-slate-800 bg-sky-100 px-1 text-center text-[10px] font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-          <CalendarClock className="h-5 w-5 shrink-0" /><span>定期取引</span>
-        </Link>
-        <Link href={`/savings?user=${currentUser}`} className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border-2 border-slate-800 bg-emerald-100 px-1 text-center text-[10px] font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-          <PiggyBank className="h-5 w-5 shrink-0" /><span>貯金目標</span>
-        </Link>
-      </div>
       {!loading && alerts.length > 0 && <section className="flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-orange-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"><h2 className="flex items-center gap-2 text-sm font-black text-orange-800"><Bell className="h-5 w-5" />家計アラート</h2>{alerts.map((item) => <div key={item.key} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700"><span className="min-w-0 flex-1">・{item.message}</span>{canEdit && <button type="button" onClick={() => dismissAlert(item)} disabled={dismissingAlertKey !== null} aria-label={`${item.message}を削除`} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 disabled:opacity-50">{dismissingAlertKey === item.key ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}</button>}</div>)}</section>}
 
       {/* 押下するとカテゴリ別の支出予算案内を展開する。 */}
@@ -428,17 +416,6 @@ function HomePageContent() {
         </div>
       )}
 
-      {/* 当月の記録カレンダー */}
-      {!loading && !dataError && (
-        <TransactionCalendar
-          currentDate={currentMonthDate}
-          transactions={calendarTransactions}
-          todayStr={todayStr}
-          selectedDate={selectedCalendarDate}
-          onSelectDate={setSelectedCalendarDate}
-        />
-      )}
-
       {/* 支出予算の全体状況と消化ペース */}
       {!loading && !dataError && hasBudget && (
         <div className="flex flex-col gap-4">
@@ -509,6 +486,15 @@ function HomePageContent() {
               />
             </div>
           </div>
+
+          {/* 当月の記録カレンダー */}
+          <TransactionCalendar
+            currentDate={currentMonthDate}
+            transactions={calendarTransactions}
+            todayStr={todayStr}
+            selectedDate={selectedCalendarDate}
+            onSelectDate={setSelectedCalendarDate}
+          />
 
           {/* 月末まで均等に支出する場合とのペース比較 */}
           <button
