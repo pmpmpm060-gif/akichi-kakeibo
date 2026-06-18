@@ -20,6 +20,14 @@ function getCalendarDays(currentDate: Date) {
   return days;
 }
 
+function formatCalendarAmount(amount: number) {
+  if (amount >= 10000) {
+    const value = Math.floor(amount / 1000) / 10;
+    return `${String(value).replace(/\.0$/, '')}万`;
+  }
+  return String(amount);
+}
+
 export function TransactionCalendar({
   currentDate,
   transactions,
@@ -53,7 +61,7 @@ export function TransactionCalendar({
 
         <div className="grid grid-cols-7 gap-1.5">
           {calendarDays.map((day, index) => {
-            if (day === null) return <div key={`empty-${index}`} />;
+            if (day === null) return <div key={`empty-${index}`} className="h-14" />;
 
             const formattedDay = String(day).padStart(2, '0');
             const targetDateStr = `${yearMonth}-${formattedDay}`;
@@ -72,8 +80,8 @@ export function TransactionCalendar({
                 type="button"
                 key={`day-${day}`}
                 onClick={() => onSelectDate(targetDateStr)}
-                aria-label={`${day}日、記録${dayTransactions.length}件`}
-                className={`relative flex aspect-square min-h-11 flex-col items-center justify-center gap-1 rounded-xl border-2 p-1 transition-all active:bg-amber-100
+                aria-label={`${day}日、記録${dayTransactions.length}件、支出${dayExpense}円、収入${dayIncome}円`}
+                className={`relative flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border-2 px-0.5 py-1 transition-all active:bg-amber-100
                   ${isToday ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-300 ring-offset-1' : 'border-slate-200'}
                   ${selectedDate === targetDateStr ? 'border-slate-800 bg-amber-200' : ''}
                   ${!isToday && dayOfWeek === 0 ? 'bg-rose-50/30' : ''}
@@ -87,9 +95,17 @@ export function TransactionCalendar({
                   {day}
                 </span>
 
-                <div className="flex h-2 items-center justify-center gap-1">
-                  {dayExpense > 0 && <span className="h-2 w-2 rounded-full bg-rose-400" />}
-                  {dayIncome > 0 && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
+                <div className="flex min-h-6 w-full flex-col items-center justify-center leading-none">
+                  {dayExpense > 0 && (
+                    <span className="max-w-full truncate text-[9px] font-black text-rose-500">
+                      -{formatCalendarAmount(dayExpense)}
+                    </span>
+                  )}
+                  {dayIncome > 0 && (
+                    <span className="max-w-full truncate text-[9px] font-black text-emerald-600">
+                      +{formatCalendarAmount(dayIncome)}
+                    </span>
+                  )}
                 </div>
               </button>
             );

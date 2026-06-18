@@ -34,6 +34,7 @@ function HomePageContent() {
 
   const [totalExpense, setTotalExpense] = useState<number>(0);
   const [totalBudget, setTotalBudget] = useState<number>(0);
+  const [totalFixedExpense, setTotalFixedExpense] = useState<number>(0);
   const [totalCarryover, setTotalCarryover] = useState<number>(0);
   const [totalBudgetOffset, setTotalBudgetOffset] = useState<number>(0);
   const [hasBudget, setHasBudget] = useState(false);
@@ -133,6 +134,11 @@ function HomePageContent() {
       setTotalExpense(
         currentTransactions
           .filter((item) => item.type === 'expense')
+          .reduce((sum, item) => sum + Number(item.amount), 0)
+      );
+      setTotalFixedExpense(
+        currentTransactions
+          .filter((item) => item.type === 'expense' && item.recurring_transaction_id !== null)
           .reduce((sum, item) => sum + Number(item.amount), 0)
       );
       setTotalBudget(
@@ -273,11 +279,15 @@ function HomePageContent() {
   const currentMonthDate = new Date();
   const todayStr = localDateString(currentMonthDate);
 
-  // 実際の残予算を、月内で均等に支出した場合の理想値と比較する。
-  const dailyRemaining = !isOverBudget ? Math.floor(remainingBudget / remainingDays) : 0;
-  const idealRemaining = Math.floor(totalBudget * (remainingDays / daysInMonth));
-  const isSimulationOk = remainingBudget >= idealRemaining;
-  const simulationDiff = Math.abs(remainingBudget - idealRemaining);
+  // 固定費は月内の発生日に左右されるため、消化ペースは変動費だけで見る。
+  const variableExpense = totalExpense - totalFixedExpense;
+  const variableBudget = Math.max(totalBudget - totalFixedExpense, 0);
+  const variableRemainingBudget = variableBudget - variableExpense;
+  const isVariableOverBudget = variableRemainingBudget < 0;
+  const dailyRemaining = !isVariableOverBudget ? Math.floor(variableRemainingBudget / remainingDays) : 0;
+  const idealRemaining = Math.floor(variableBudget * (remainingDays / daysInMonth));
+  const isSimulationOk = variableRemainingBudget >= idealRemaining;
+  const simulationDiff = Math.abs(variableRemainingBudget - idealRemaining);
 
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
@@ -464,10 +474,10 @@ function HomePageContent() {
               </div>
             </div>
 
-            {!isOverBudget && (
+            {!isVariableOverBudget && (
               <div className="bg-white/80 border-2 border-dashed border-slate-700 rounded-2xl p-2.5 flex items-center justify-between text-xs mt-1">
                 <span className="font-bold text-slate-600 flex items-center gap-1">
-                  <CalendarDays className="w-4 h-4 text-slate-700" /> 今日からの日当たり目安:
+                  <CalendarDays className="w-4 h-4 text-slate-700" /> 変動費の日当たり目安:
                 </span>
                 <span className="font-black text-sm text-slate-900">
                   ¥{dailyRemaining.toLocaleString()} <span className="text-[10px] text-slate-500">/ 日</span>
@@ -520,15 +530,23 @@ function HomePageContent() {
 
             {isSimulationOpen && <div className="text-xs text-slate-600 flex flex-col gap-1 mt-1 bg-white p-3 rounded-2xl border border-slate-300">
               <div className="flex justify-between">
-                <span>現在（{currentDay}日目）の理想の残高:</span>
+                <span>固定費を除いた変動費予算:</span>
+                <span className="font-bold text-slate-800">¥{variableBudget.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>今月の変動費実績:</span>
+                <span className="font-bold text-slate-800">¥{variableExpense.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>現在（{currentDay}日目）の理想の残り変動費:</span>
                 <span className="font-bold text-slate-800">¥{idealRemaining.toLocaleString()}</span>
               </div>
               <div className="flex justify-between border-t border-slate-100 pt-1 mt-1 font-bold">
                 <span>結果・診断:</span>
                 <span className={isSimulationOk ? 'text-indigo-600' : 'text-orange-600'}>
                   {isSimulationOk 
-                    ? `理想より ¥${simulationDiff.toLocaleString()} 多く残せています！`
-                    : `理想より ¥${simulationDiff.toLocaleString()} ペースが早いです！`
+                    ? `理想より ¥${simulationDiff.toLocaleString()} 多く変動費を残せています！`
+                    : `理想より ¥${simulationDiff.toLocaleString()} 変動費のペースが早いです！`
                   }
                 </span>
               </div>
