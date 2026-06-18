@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight, CalendarClock, Search, RotateCcw, Bookmark, Tag, Zap } from 'lucide-react';
+import { Plus, Trash2, Loader2, ChevronLeft, ChevronRight, X, Wallet, ArrowDownRight, ArrowUpRight, CalendarClock, Search, RotateCcw, Bookmark, Zap } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
@@ -17,7 +17,6 @@ import { userErrorMessage } from '../../lib/user-errors';
 import { AmountCalculator } from '../../components/amount-calculator';
 import { useCurrentProfileId } from '../../lib/household-profiles';
 
-type TagRow = Database['public']['Tables']['tags']['Row'];
 type Template = Database['public']['Tables']['transaction_templates']['Row'];
 type SavedFilter = Database['public']['Tables']['saved_filters']['Row'];
 type BudgetOffsetType = 'overall' | 'category' | 'special_reserve';
@@ -62,11 +61,7 @@ function DashboardPageContent() {
   const [filterType, setFilterType] = useState<'all' | 'expense' | 'income'>('all');
   const [filterCategoryId, setFilterCategoryId] = useState('all');
   const [recentCategoryIds, setRecentCategoryIds] = useState<string[]>([]);
-  const [tags, setTags] = useState<TagRow[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [transactionTagMap, setTransactionTagMap] = useState<Record<string, string[]>>({});
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [filterTagId, setFilterTagId] = useState('all');
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const [budgetOffsetEnabled, setBudgetOffsetEnabled] = useState(false);
   const [budgetOffsetType, setBudgetOffsetType] = useState<BudgetOffsetType>('overall');
@@ -107,7 +102,7 @@ function DashboardPageContent() {
         }
       }
 
-      const [categoryResult, transactionResult, tagResult, transactionTagResult, templateResult, savedFilterResult] = await Promise.all([
+      const [categoryResult, transactionResult, templateResult, savedFilterResult] = await Promise.all([
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
@@ -116,19 +111,13 @@ function DashboardPageContent() {
           .gte('date', startOfMonth)
           .lte('date', safeEndOfMonth)
           .order('date', { ascending: false }),
-        supabase.from('tags').select('*').eq('user_id', currentUser).order('created_at'),
-        supabase.from('transaction_tags')
-          .select('transaction_id, tag_id, transactions!inner(user_id, date)')
-          .eq('transactions.user_id', currentUser)
-          .gte('transactions.date', startOfMonth)
-          .lte('transactions.date', safeEndOfMonth),
         supabase.from('transaction_templates').select('*').eq('user_id', currentUser).order('created_at'),
         supabase.from('saved_filters').select('*').eq('user_id', currentUser).eq('filter_type', 'transactions').order('created_at'),
       ]);
 
       if (ignore) return;
 
-      const error = categoryResult.error || transactionResult.error || tagResult.error || transactionTagResult.error || templateResult.error || savedFilterResult.error;
+      const error = categoryResult.error || transactionResult.error || templateResult.error || savedFilterResult.error;
       if (error) {
         setDataError('家計簿データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
         setLoading(false);
@@ -148,13 +137,8 @@ function DashboardPageContent() {
       }
 
       setTransactions(transData || []);
-      setTags(tagResult.data || []);
       setTemplates(templateResult.data || []);
       setSavedFilters(savedFilterResult.data || []);
-      setTransactionTagMap((transactionTagResult.data || []).reduce<Record<string, string[]>>((map, item) => {
-        map[item.transaction_id] = [...(map[item.transaction_id] || []), item.tag_id];
-        return map;
-      }, {}));
       setLoading(false);
     };
 
@@ -207,14 +191,13 @@ function DashboardPageContent() {
 
     setIsAddingTransaction(true);
     try {
-      // 取引とタグはRPC内の1トランザクションで保存し、片方だけ残る状態を防ぐ。
+      // 取引登録はRPC内で一括処理し、入力の整合性をDB側でも検証する。
       const { data: transactionId, error } = await supabase.rpc('create_transaction_with_tags', {
         target_user_id: currentUser,
         target_category_id: categoryId,
         target_amount: parsedAmount,
         target_date: date,
         target_description: description,
-        target_tag_ids: selectedTagIds,
         target_budget_offset_type: targetBudgetOffsetType,
         target_budget_offset_category_id: targetBudgetOffsetCategoryId,
       });
@@ -228,11 +211,9 @@ function DashboardPageContent() {
         return;
       }
       const created = createdData;
-      setTransactionTagMap((current) => ({ ...current, [created.id]: selectedTagIds }));
       setTransactions((current) => [created, ...current]);
       setAmount("");
       setDescription("");
-      setSelectedTagIds([]);
       setBudgetOffsetEnabled(false);
       setBudgetOffsetType('overall');
       setBudgetOffsetCategoryId('');
@@ -321,8 +302,7 @@ function DashboardPageContent() {
       || transaction.categories?.name.toLocaleLowerCase('ja').includes(normalizedKeyword);
     const matchesType = filterType === 'all' || transaction.type === filterType;
     const matchesCategory = filterCategoryId === 'all' || transaction.category_id === filterCategoryId;
-    const matchesTag = filterTagId === 'all' || (transactionTagMap[transaction.id] || []).includes(filterTagId);
-    return matchesKeyword && matchesType && matchesCategory && matchesTag;
+    return matchesKeyword && matchesType && matchesCategory;
   });
 
   const applyTemplate = (template: Template) => {
@@ -342,7 +322,7 @@ function DashboardPageContent() {
     try {
       const { data, error } = await supabase.from('saved_filters').insert({
         user_id: currentUser, name: name.trim(), filter_type: 'transactions',
-        conditions: { keyword, filterType, filterCategoryId, filterTagId },
+        conditions: { keyword, filterType, filterCategoryId },
       }).select().single();
       if (error) alert(userErrorMessage('検索条件の保存', error));
       else { setSavedFilters((current) => [...current, data]); notify('検索条件を保存しました'); }
@@ -352,11 +332,10 @@ function DashboardPageContent() {
   };
 
   const applySavedFilter = (filter: SavedFilter) => {
-    const conditions = filter.conditions as { keyword?: string; filterType?: typeof filterType; filterCategoryId?: string; filterTagId?: string };
+    const conditions = filter.conditions as { keyword?: string; filterType?: typeof filterType; filterCategoryId?: string };
     setKeyword(conditions.keyword || '');
     setFilterType(conditions.filterType || 'all');
     setFilterCategoryId(conditions.filterCategoryId || 'all');
-    setFilterTagId(conditions.filterTagId || 'all');
   };
 
   const getCalendarDays = () => {
@@ -519,8 +498,6 @@ function DashboardPageContent() {
               <input ref={descriptionInputRef} type="text" enterKeyHint="done" value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} placeholder="カフェ、お買い物など（任意）" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-bold" />
             </div>
 
-            {tags.length > 0 && <div className="flex flex-col gap-2"><label className="flex items-center gap-1 text-xs font-black text-emerald-900"><Tag className="h-4 w-4" />タグ（複数選択可）</label><div className="flex flex-wrap gap-2">{tags.map((tag) => <button key={tag.id} type="button" onClick={() => setSelectedTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} className={`min-h-11 rounded-xl border-2 px-3 text-xs font-black ${selectedTagIds.includes(tag.id) ? 'border-slate-800 bg-amber-200' : 'border-slate-300 bg-white'}`}># {tag.name}</button>)}</div></div>}
-
             <button type="submit" disabled={isAddingTransaction} className="w-full bg-slate-900 text-white font-black py-3 rounded-2xl border-2 border-slate-800 text-sm mt-1 disabled:opacity-60 flex items-center justify-center gap-2">
               {isAddingTransaction
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> 記録中...</>
@@ -533,7 +510,7 @@ function DashboardPageContent() {
               <h2 className="flex items-center gap-2 text-sm font-black"><Search className="h-4 w-4" />記録を検索・絞り込み</h2>
               <button
                 type="button"
-                onClick={() => { setKeyword(''); setFilterType('all'); setFilterCategoryId('all'); setFilterTagId('all'); }}
+                onClick={() => { setKeyword(''); setFilterType('all'); setFilterCategoryId('all'); }}
                 className="flex min-h-11 items-center gap-1 rounded-xl px-2 text-xs font-black text-slate-500"
               >
                 <RotateCcw className="h-4 w-4" />リセット
@@ -556,7 +533,6 @@ function DashboardPageContent() {
                 {categories.map((category) => <option key={category.id} value={category.id}>{category.icon} {category.name}</option>)}
               </select>
             </div>
-            <select value={filterTagId} onChange={(event) => setFilterTagId(event.target.value)} className="min-h-12 rounded-xl border-2 border-slate-800 bg-white px-3 text-base font-bold"><option value="all">すべてのタグ</option>{tags.map((tag) => <option key={tag.id} value={tag.id}># {tag.name}</option>)}</select>
             <div className="flex flex-wrap gap-2"><button type="button" onClick={saveCurrentFilter} className="flex min-h-11 items-center gap-1 rounded-xl border-2 border-slate-800 bg-indigo-100 px-3 text-xs font-black"><Bookmark className="h-4 w-4" />現在の条件を保存</button>{savedFilters.map((filter) => <button key={filter.id} type="button" onClick={() => applySavedFilter(filter)} className="min-h-11 rounded-xl border border-slate-400 px-3 text-xs font-black">{filter.name}</button>)}</div>
             <p className="text-right text-xs font-black text-slate-500">{filteredTransactions.length}件を表示</p>
           </section>
@@ -637,7 +613,6 @@ function DashboardPageContent() {
                       <span className="min-w-0">
                         <span className="block truncate text-xs font-black text-slate-500">{transaction.categories?.name || '未分類'}</span>
                         <span className="block truncate text-sm font-bold text-slate-800">{transaction.description || 'メモなし'}</span>
-                        {(transactionTagMap[transaction.id] || []).length > 0 && <span className="block truncate text-xs font-bold text-amber-700">{(transactionTagMap[transaction.id] || []).map((id) => `#${tags.find((tag) => tag.id === id)?.name || ''}`).join(' ')}</span>}
                       </span>
                       <span className="flex shrink-0 items-center gap-1"><span className={`text-sm font-black ${transaction.type === 'expense' ? 'text-rose-500' : 'text-emerald-600'}`}>
                         {transaction.type === 'expense' ? '-' : '+'}¥{transaction.amount.toLocaleString()}

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ArrowDownRight, ArrowUpRight, BarChart3, Bookmark, ChevronLeft, ChevronRight, Loader2, Save, Tag, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, BarChart3, Bookmark, ChevronLeft, ChevronRight, Loader2, Save, TrendingDown, TrendingUp } from 'lucide-react';
 import { DataErrorCard } from '../../components/data-error-card';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
@@ -13,7 +13,6 @@ import { AppHeader } from '../../components/mobile-ui';
 import { userErrorMessage } from '../../lib/user-errors';
 
 type ReportTransaction = Pick<Transaction, 'id' | 'amount' | 'category_id' | 'date' | 'type' | 'recurring_transaction_id'>;
-type TagRow = Database['public']['Tables']['tags']['Row'];
 type SavedFilter = Database['public']['Tables']['saved_filters']['Row'];
 const PAGE_SIZE = 1000;
 
@@ -63,8 +62,6 @@ function ReportsPageContent() {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [reportMode, setReportMode] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedTrendKey, setSelectedTrendKey] = useState<string | null>(null);
-  const [tags, setTags] = useState<TagRow[]>([]);
-  const [transactionTagMap, setTransactionTagMap] = useState<Record<string, string[]>>({});
   const [monthlyReview, setMonthlyReview] = useState('');
   const [savedReports, setSavedReports] = useState<SavedFilter[]>([]);
   const [savingReview, setSavingReview] = useState(false);
@@ -79,29 +76,18 @@ function ReportsPageContent() {
   useEffect(() => {
     let ignore = false;
     const fetchData = async () => {
-      const [transactionResult, categoryResult, tagResult, transactionTagResult, reviewResult, savedReportResult] = await Promise.all([
+      const [transactionResult, categoryResult, reviewResult, savedReportResult] = await Promise.all([
         fetchReportTransactions(currentUser, reportStart, reportEnd),
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
-        supabase.from('tags').select('*').eq('user_id', currentUser).order('created_at'),
-        supabase.from('transaction_tags')
-          .select('transaction_id, tag_id, transactions!inner(user_id, date)')
-          .eq('transactions.user_id', currentUser)
-          .gte('transactions.date', reportStart)
-          .lte('transactions.date', reportEnd),
         supabase.from('monthly_reviews').select('content').eq('user_id', currentUser).eq('month', `${currentMonth}-01`).maybeSingle(),
         supabase.from('saved_filters').select('*').eq('user_id', currentUser).eq('filter_type', 'reports').order('created_at'),
       ]);
       if (ignore) return;
-      const error = transactionResult.error || categoryResult.error || tagResult.error || transactionTagResult.error || reviewResult.error || savedReportResult.error;
+      const error = transactionResult.error || categoryResult.error || reviewResult.error || savedReportResult.error;
       if (error) setDataError('レポートの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
       else {
         setTransactions(transactionResult.data || []);
         setCategories(categoryResult.data || []);
-        setTags(tagResult.data || []);
-        setTransactionTagMap((transactionTagResult.data || []).reduce<Record<string, string[]>>((map, item) => {
-          map[item.transaction_id] = [...(map[item.transaction_id] || []), item.tag_id];
-          return map;
-        }, {}));
         setMonthlyReview(reviewResult.data?.content || '');
         setSavedReports(savedReportResult.data || []);
       }
@@ -174,10 +160,6 @@ function ReportsPageContent() {
     ...category,
     total: rankingTransactions.filter((transaction) => transaction.date.startsWith(String(selectedDate.getFullYear())) && transaction.category_id === category.id && transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0),
   })).filter((category) => category.total > 0).sort((left, right) => right.total - left.total);
-  const tagRanking = tags.map((tag) => ({
-    ...tag,
-    total: monthTransactions.filter((transaction) => transaction.type === 'expense' && (transactionTagMap[transaction.id] || []).includes(tag.id)).reduce((sum, transaction) => sum + transaction.amount, 0),
-  })).filter((tag) => tag.total > 0).sort((left, right) => right.total - left.total);
 
   const changeMonth = (increment: number) => {
     setLoading(true);
@@ -295,7 +277,6 @@ function ReportsPageContent() {
             <div className="flex items-center justify-center gap-5 border-t border-white/10 py-3 text-[10px] font-black text-slate-300"><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />収入</span><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-rose-400" />支出</span></div>
           </div>
         </section>
-        {tagRanking.length > 0 && <section className="flex flex-col gap-3"><h2 className="flex items-center gap-2 text-sm font-black"><Tag className="h-5 w-5" />タグ別支出</h2>{tagRanking.map((tag) => <article key={tag.id} className="flex justify-between rounded-2xl border-2 border-slate-800 bg-white p-3"><p className="text-sm font-black"># {tag.name}</p><p className="text-sm font-black text-rose-600">¥{tag.total.toLocaleString()}</p></article>)}</section>}
         <section className="flex flex-col gap-3 rounded-3xl border-2 border-slate-800 bg-amber-50 p-4"><h2 className="text-sm font-black">今月の振り返り</h2><textarea value={monthlyReview} onChange={(event) => setMonthlyReview(event.target.value)} rows={5} placeholder="今月よかったこと、来月気を付けたいことなど" className="rounded-xl border-2 border-slate-800 p-3 text-base" /><button onClick={saveReview} disabled={savingReview} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-amber-300 text-sm font-black disabled:opacity-50"><Save className="h-5 w-5" />{savingReview ? '保存中...' : '振り返りを保存'}</button></section>
 
         <section className="flex flex-col gap-3">

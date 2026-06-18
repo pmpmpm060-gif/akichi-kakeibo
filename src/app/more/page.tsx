@@ -24,7 +24,7 @@ function MorePageContent() {
     { href: '/recurring', label: '定期取引', description: '固定費・定期収入を管理', icon: CalendarClock, color: 'bg-sky-100' },
     { href: '/special-expenses', label: '特別支出予定', description: '税金・年払い・不定期支出を管理', icon: CalendarRange, color: 'bg-cyan-100' },
     { href: '/savings', label: '貯金目標', description: '目標と積立状況を管理', icon: PiggyBank, color: 'bg-emerald-100' },
-    { href: '/tools', label: '便利機能設定', description: 'タグ・テンプレート・通知を管理', icon: Wrench, color: 'bg-amber-100' },
+    { href: '/tools', label: '便利機能設定', description: 'テンプレート・通知を管理', icon: Wrench, color: 'bg-amber-100' },
     ...(isAdmin ? [{ href: '/admin/approvals', label: '利用申請の承認', description: '新規アカウントの利用を許可', icon: ShieldCheck, color: 'bg-emerald-100' }] : []),
   ];
   return <div className="flex flex-col gap-6 px-4 py-5">

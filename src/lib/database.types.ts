@@ -555,81 +555,6 @@ export type Database = {
           },
         ]
       }
-      tags: {
-        Row: {
-          color: string
-          created_at: string
-          household_id: string
-          id: string
-          name: string
-          user_id: string
-        }
-        Insert: {
-          color?: string
-          created_at?: string
-          household_id?: string
-          id?: string
-          name: string
-          user_id: string
-        }
-        Update: {
-          color?: string
-          created_at?: string
-          household_id?: string
-          id?: string
-          name?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tags_household_id_fkey"
-            columns: ["household_id"]
-            isOneToOne: false
-            referencedRelation: "households"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      transaction_tags: {
-        Row: {
-          household_id: string
-          tag_id: string
-          transaction_id: string
-        }
-        Insert: {
-          household_id?: string
-          tag_id: string
-          transaction_id: string
-        }
-        Update: {
-          household_id?: string
-          tag_id?: string
-          transaction_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "transaction_tags_household_id_fkey"
-            columns: ["household_id"]
-            isOneToOne: false
-            referencedRelation: "households"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transaction_tags_tag_id_fkey"
-            columns: ["tag_id"]
-            isOneToOne: false
-            referencedRelation: "tags"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transaction_tags_transaction_id_fkey"
-            columns: ["transaction_id"]
-            isOneToOne: false
-            referencedRelation: "transactions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       transaction_templates: {
         Row: {
           amount: number
@@ -817,7 +742,6 @@ export type Database = {
           target_category_id: string
           target_date: string
           target_description: string
-          target_tag_ids: string[]
           target_user_id: string
         }
         Returns: string
