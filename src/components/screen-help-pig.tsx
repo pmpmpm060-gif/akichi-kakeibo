@@ -26,7 +26,7 @@ const guides: Record<string, ScreenGuide> = {
     tip: 'まずは「あと使えるお金」を確認すると、今日使える目安が分かりやすいぶー！',
   },
   '/dashboard': {
-    title: '家計簿を付ける画面の使い方',
+    title: '記録する画面の使い方',
     introduction: '毎日の収入・支出を記録して、月ごとの状況を確認する画面だぶー！',
     steps: [
       '日付・分類・金額・メモを入力して記録します。',
