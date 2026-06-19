@@ -154,13 +154,13 @@ function BudgetsPageContent() {
       return (
         <div
           key={cat.id}
-          className="flex flex-col gap-3 rounded-2xl border-2 border-slate-800 bg-white p-4 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
+          className="grid gap-2 rounded-2xl border-2 border-slate-800 bg-white p-3 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
         >
-          <span className="font-black text-sm text-slate-800 flex items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2 text-sm font-black text-slate-800">
             <span className="text-xl">{cat.icon || (cat.type === 'income' ? "💰" : "💸")}</span> {cat.name}
           </span>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-1.5">
+          <div className="grid gap-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5">
               <input
                 type="number"
                 inputMode="numeric"
@@ -171,7 +171,7 @@ function BudgetsPageContent() {
                 disabled={isSaving}
                 aria-invalid={hasInvalidAmount}
                 placeholder="0"
-                className={`min-h-12 w-full rounded-xl border-2 px-3 py-2 text-right text-base font-black focus:outline-none disabled:opacity-60 ${
+                className={`min-h-11 w-full rounded-xl border-2 px-3 py-2 text-right text-base font-black focus:outline-none disabled:opacity-60 ${
                   hasInvalidAmount
                     ? 'border-rose-500 bg-rose-50'
                     : `border-slate-800 ${cat.type === 'income' ? 'focus:bg-emerald-50' : 'focus:bg-sky-50'}`
@@ -183,7 +183,7 @@ function BudgetsPageContent() {
             {hasInvalidAmount && (
               <p className="text-[10px] font-black text-rose-600">0以上の整数で入力してください</p>
             )}
-            <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-600">
+            <label className="flex min-h-9 cursor-pointer items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-600">
               <span className="flex items-center gap-1.5">
                 <Repeat2 className="w-4 h-4" />
                 余り・超過を繰越
@@ -195,7 +195,7 @@ function BudgetsPageContent() {
                 disabled={isSaving}
                 className="peer sr-only"
               />
-              <span className="relative h-7 w-12 rounded-full border-2 border-slate-800 bg-slate-300 transition-colors peer-checked:bg-sky-400 peer-disabled:opacity-60 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-slate-500 after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
+              <span className="relative h-6 w-11 rounded-full border-2 border-slate-800 bg-slate-300 transition-colors peer-checked:bg-sky-400 peer-disabled:opacity-60 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:border after:border-slate-500 after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
             </label>
           </div>
         </div>
@@ -207,8 +207,8 @@ function BudgetsPageContent() {
     <div className="flex flex-col gap-6 px-4 py-5">
       <AppHeader title="予算を決める" currentUser={currentUser} />
 
-      <div className="bg-sky-100 border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center gap-3">
-        <div className="text-2xl">💡</div>
+      <div className="bg-sky-100 border-2 border-slate-800 rounded-2xl p-3 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] flex items-center gap-3">
+        <div className="text-xl">💡</div>
         <p className="text-xs font-bold text-sky-950 leading-relaxed">
           基本予算は毎月使われます。カテゴリごとに繰越をONにすると、余りも超過も翌月の予算へ反映されます。
         </p>
@@ -233,14 +233,14 @@ function BudgetsPageContent() {
             {incomeCategories.length > 0 && (
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">💰 収入（目標金額）</p>
-                <div className="flex flex-col gap-3">{renderCategoryRows(incomeCategories)}</div>
+                <div className="flex flex-col gap-2">{renderCategoryRows(incomeCategories)}</div>
               </div>
             )}
 
             {expenseCategories.length > 0 && (
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">💸 支出（予算上限）</p>
-                <div className="flex flex-col gap-3">{renderCategoryRows(expenseCategories)}</div>
+                <div className="flex flex-col gap-2">{renderCategoryRows(expenseCategories)}</div>
               </div>
             )}
 

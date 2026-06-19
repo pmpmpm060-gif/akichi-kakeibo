@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Home, Menu, Plus, PiggyBank } from 'lucide-react';
+import { BarChart3, Home, Menu, Plus, PiggyBank } from 'lucide-react';
 import { parseHouseholdUser } from '../lib/household-users';
 import { useCurrentProfileId } from '../lib/household-profiles';
 
 const items = [
   { label: 'ホーム', path: '/', icon: Home },
+  { label: 'レポート', path: '/reports', icon: BarChart3 },
   { label: '記録する', path: '/dashboard', hash: '#transaction-form', icon: Plus, primary: true },
   { label: '予算', path: '/budgets', icon: PiggyBank },
   { label: 'その他', path: '/more', icon: Menu },
@@ -27,7 +28,7 @@ export function MobileBottomNav() {
       aria-label="メインナビゲーション"
       className="mobile-safe-bottom fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md border-t-2 border-slate-800 bg-white/95 px-2 pt-2 shadow-[0_-4px_18px_rgba(15,23,42,0.12)] backdrop-blur"
     >
-      <div className={`grid gap-1 ${visibleItems.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+      <div className={`grid gap-1 ${visibleItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
         {visibleItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.path && !item.primary;

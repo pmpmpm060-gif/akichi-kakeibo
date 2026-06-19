@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { Plus, Loader2, ChevronLeft, ChevronRight, Wallet, ArrowDownRight, ArrowUpRight, CalendarClock, Zap } from 'lucide-react';
+import { Plus, Loader2, ChevronLeft, ChevronRight, Wallet, ArrowDownRight, ArrowUpRight, Zap } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
@@ -377,9 +376,6 @@ function DashboardPageContent() {
 
         </>
       )}
-      <Link href={`/recurring?user=${currentUser}`} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border-2 border-slate-800 bg-indigo-100 text-sm font-black shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-        <CalendarClock className="h-5 w-5" />固定費・定期取引を管理
-      </Link>
     </div>
   );
 }
