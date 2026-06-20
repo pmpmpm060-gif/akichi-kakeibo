@@ -21,7 +21,7 @@ function BudgetsPageContent() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<{ [key: string]: number }>({});
-  const [carryoverSettings, setCarryoverSettings] = useState<{ [key: string]: boolean }>({});
+  const [totalCarryoverEnabled, setTotalCarryoverEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -58,9 +58,7 @@ function BudgetsPageContent() {
 
       if (catData) {
         setCategories(catData);
-        setCarryoverSettings(
-          Object.fromEntries(catData.map((category) => [category.id, category.carryover_enabled]))
-        );
+        setTotalCarryoverEnabled(catData.some((category) => category.type === 'expense' && category.carryover_enabled));
       }
 
       const budgetMap: { [key: string]: number } = {};
@@ -99,11 +97,8 @@ function BudgetsPageContent() {
     setHasChanges(true);
   };
 
-  const handleCarryoverChange = (categoryId: string, enabled: boolean) => {
-    setCarryoverSettings((current) => ({
-      ...current,
-      [categoryId]: enabled,
-    }));
+  const handleTotalCarryoverChange = (enabled: boolean) => {
+    setTotalCarryoverEnabled(enabled);
     setHasChanges(true);
   };
 
@@ -120,7 +115,7 @@ function BudgetsPageContent() {
     const budgetEntries = categories.map((cat) => ({
       category_id: cat.id,
       amount: budgets[cat.id] || 0,
-      carryover_enabled: carryoverSettings[cat.id] || false,
+      carryover_enabled: cat.type === 'expense' ? totalCarryoverEnabled : false,
     }));
 
     // 予算額と繰越設定を1回のRPC・DBトランザクションで保存し、
@@ -133,7 +128,7 @@ function BudgetsPageContent() {
       if (error) {
         alert(userErrorMessage('予算の保存', error));
       } else {
-        notify('基本予算と繰越設定を保存しました');
+        notify('基本予算とTOTAL繰越設定を保存しました');
         setHasChanges(false);
       }
     } catch {
@@ -183,20 +178,6 @@ function BudgetsPageContent() {
             {hasInvalidAmount && (
               <p className="text-[10px] font-black text-rose-600">0以上の整数で入力してください</p>
             )}
-            <label className="flex min-h-9 cursor-pointer items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-600">
-              <span className="flex items-center gap-1.5">
-                <Repeat2 className="w-4 h-4" />
-                余り・超過を繰越
-              </span>
-              <input
-                type="checkbox"
-                checked={carryoverSettings[cat.id] || false}
-                onChange={(e) => handleCarryoverChange(cat.id, e.target.checked)}
-                disabled={isSaving}
-                className="peer sr-only"
-              />
-              <span className="relative h-6 w-11 rounded-full border-2 border-slate-800 bg-slate-300 transition-colors peer-checked:bg-sky-400 peer-disabled:opacity-60 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:border after:border-slate-500 after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
-            </label>
           </div>
         </div>
       );
@@ -207,10 +188,10 @@ function BudgetsPageContent() {
     <div className="flex flex-col gap-6 px-4 py-5">
       <AppHeader title="予算を決める" currentUser={currentUser} />
 
-      <div className="bg-sky-100 border-2 border-slate-800 rounded-2xl p-3 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)] flex items-center gap-3">
+      <div className="bg-yellow-100 border-2 border-slate-800 rounded-2xl p-3 shadow-[3px_3px_0px_0px_rgba(236,72,153,1)] flex items-center gap-3">
         <div className="text-xl">💡</div>
-        <p className="text-xs font-bold text-sky-950 leading-relaxed">
-          基本予算は毎月使われます。カテゴリごとに繰越をONにすると、余りも超過も翌月の予算へ反映されます。
+        <p className="text-xs font-bold text-slate-900 leading-relaxed">
+          基本予算は毎月使われます。TOTAL繰越をONにすると、支出全体の余り・超過を翌月の総予算へ反映します。
         </p>
       </div>
 
@@ -240,6 +221,23 @@ function BudgetsPageContent() {
             {expenseCategories.length > 0 && (
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">💸 支出（予算上限）</p>
+                <label className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl border-2 border-slate-800 bg-pink-100 px-3 py-2 text-xs font-black text-slate-800 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Repeat2 className="h-5 w-5 shrink-0 text-pink-600" />
+                    <span className="min-w-0">
+                      <span className="block text-sm">TOTALで余り・超過を繰越</span>
+                      <span className="block text-[10px] text-slate-600">カテゴリ別ではなく、支出全体の合計で翌月へ反映</span>
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={totalCarryoverEnabled}
+                    onChange={(e) => handleTotalCarryoverChange(e.target.checked)}
+                    disabled={isSaving}
+                    className="peer sr-only"
+                  />
+                  <span className="relative h-7 w-12 shrink-0 rounded-full border-2 border-slate-800 bg-white transition-colors peer-checked:bg-cyan-300 peer-disabled:opacity-60 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-slate-500 after:bg-pink-400 after:transition-transform peer-checked:after:translate-x-5" />
+                </label>
                 <div className="flex flex-col gap-2">{renderCategoryRows(expenseCategories)}</div>
               </div>
             )}
@@ -249,7 +247,7 @@ function BudgetsPageContent() {
               disabled={isSaving}
               className="w-full bg-sky-300 text-slate-900 font-black py-4 rounded-2xl border-2 border-slate-800 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] text-sm flex items-center justify-center gap-2 mt-2"
             >
-              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" strokeWidth={2.5} />予算と繰越設定を保存する！ ✨</>}
+              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" strokeWidth={2.5} />予算とTOTAL繰越を保存する！ ✨</>}
             </button>
           </div>
         )}

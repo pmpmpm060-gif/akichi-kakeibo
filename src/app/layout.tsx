@@ -20,10 +20,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body className={`${jakarta.className} bg-amber-50 text-slate-800 antialiased`}>
+      <body className={`${jakarta.className} bg-[#fff36d] text-slate-800 antialiased`}>
         {/* PCで開いた場合も、モバイル向けの表示幅を維持する。 */}
         <ToastProvider>
-          <div className="mx-auto min-h-screen max-w-md bg-white shadow-xl flex flex-col border-x border-slate-200">
+          <div className="mx-auto min-h-screen max-w-md bg-[#fffbe8] shadow-xl flex flex-col border-x-2 border-slate-900">
             <main className="flex-1 pb-24">
               {children}
             </main>

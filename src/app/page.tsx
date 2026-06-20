@@ -140,6 +140,8 @@ function HomePageContent() {
         }, new Map<string, number>());
       const categoryBudgetOffsetTotal = Array.from(categoryBudgetOffsetMap.values()).reduce((sum, value) => sum + value, 0);
       const normalBudgetOffsetTotal = overallBudgetOffset + categoryBudgetOffsetTotal;
+      const expenseBudgets = (budgetResult.data || []).filter((item) => item.category_type === 'expense');
+      const totalCarryoverAmount = expenseBudgets.reduce((sum, item) => sum + Number(item.carryover_amount), 0);
       setTotalExpense(
         currentTransactions
           .filter((item) => item.type === 'expense')
@@ -152,21 +154,14 @@ function HomePageContent() {
       );
       setTotalBudget(
         // 収入予算は目標額であり、支出可能額ではないため合計から除外する。
-        (budgetResult.data || [])
-          .filter((item) => item.category_type === 'expense')
-          .reduce((sum, item) => sum + Number(item.amount), 0) + normalBudgetOffsetTotal
+        expenseBudgets.reduce((sum, item) => sum + Number(item.base_amount), 0) + totalCarryoverAmount + normalBudgetOffsetTotal
       );
       setTotalBudgetOffset(normalBudgetOffsetTotal);
-      setTotalCarryover(
-        (budgetResult.data || [])
-          .filter((item) => item.category_type === 'expense')
-          .reduce((sum, item) => sum + Number(item.carryover_amount), 0)
-      );
+      setTotalCarryover(totalCarryoverAmount);
       setHasBudget(
-        (budgetResult.data || []).some(
+        expenseBudgets.some(
           (item) =>
-            item.category_type === 'expense'
-            && (Number(item.base_amount) !== 0 || Number(item.carryover_amount) !== 0)
+            Number(item.base_amount) !== 0 || Number(item.carryover_amount) !== 0
         ) || normalBudgetOffsetTotal > 0
       );
       setBudgetSummary(
@@ -188,8 +183,8 @@ function HomePageContent() {
             return {
               ...category,
               actual,
-              budget: Number(effectiveBudget?.amount || 0) + categoryBudgetOffset,
-              carryover: Number(effectiveBudget?.carryover_amount || 0),
+              budget: Number(effectiveBudget?.base_amount || 0) + categoryBudgetOffset,
+              carryover: 0,
             };
           })
           .filter((item) => item.budget !== 0 || item.actual !== 0)
@@ -200,7 +195,7 @@ function HomePageContent() {
         const currentCategoryExpenses = currentTransactions.filter((item) => item.category_id === category.id && item.type === 'expense');
         const currentActual = currentCategoryExpenses.reduce((sum, item) => sum + Number(item.amount), 0);
         const previousActual = (previousTransactionResult.data || []).filter((item) => item.category_id === category.id && item.type === 'expense').reduce((sum, item) => sum + Number(item.amount), 0);
-        const budget = Number((budgetResult.data || []).find((item) => item.category_id === category.id)?.amount || 0) + (categoryBudgetOffsetMap.get(category.id) || 0);
+        const budget = Number((budgetResult.data || []).find((item) => item.category_id === category.id)?.base_amount || 0) + (categoryBudgetOffsetMap.get(category.id) || 0);
         // 定期取引由来の固定費だけなら到達通知は不要だが、超過時は見逃さない。
         const hasVariableExpense = currentCategoryExpenses.some((item) => item.recurring_transaction_id === null);
         if (budget > 0 && currentActual > budget) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:budget-over`, message: `${category.name}が予算を超過しています` });
@@ -368,15 +363,20 @@ function HomePageContent() {
   const simulationDiff = Math.abs(variableRemainingBudget - idealRemaining);
 
   return (
-    <div className="flex flex-col gap-6 px-4 py-5">
+    <div className="relative flex flex-col gap-6 overflow-hidden bg-[#fff36d] px-4 py-5">
+      <div aria-hidden="true" className="pointer-events-none absolute -right-14 top-20 h-40 w-40 rounded-[45%] bg-pink-400" />
+      <div aria-hidden="true" className="pointer-events-none absolute left-4 top-28 h-20 w-32 rotate-[-12deg] rounded-[50%] bg-white" />
+      <div aria-hidden="true" className="pointer-events-none absolute right-4 top-48 h-24 w-32 rotate-[10deg] rounded-[45%] bg-cyan-200" />
+      <div aria-hidden="true" className="pointer-events-none absolute left-2 top-3 text-4xl font-black text-pink-500">+</div>
+      <div aria-hidden="true" className="pointer-events-none absolute right-8 top-7 text-5xl font-black text-slate-900">♡</div>
       {/* ヘッダーとアカウント操作 */}
-      <div className="flex items-center justify-between pt-4">
+      <div className="relative z-10 flex items-center justify-between pt-4">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-amber-600 bg-amber-100 px-2.5 py-1 rounded-full flex items-center gap-1 w-max">
+          <span className="text-xs font-bold uppercase tracking-wider text-pink-700 bg-white px-2.5 py-1 rounded-full flex items-center gap-1 w-max border-2 border-pink-300">
             <Sparkles className="w-3 h-3" /> Easy & Pop
           </span>
           <h1 className="text-3xl font-black mt-1 tracking-tight">
-            ぽっぷ<span className="text-emerald-500">家計簿</span>
+            ぽっぷ<span className="text-pink-500">家計簿</span>
           </h1>
         </div>
 
@@ -385,7 +385,7 @@ function HomePageContent() {
             onClick={handleSignOut}
             disabled={isSigningOut}
             aria-label="ログアウト"
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white text-slate-700 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] disabled:opacity-60"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border-2 border-slate-900 bg-white text-slate-700 shadow-[2px_2px_0px_0px_rgba(236,72,153,1)] disabled:opacity-60"
           >
             {isSigningOut
               ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -394,8 +394,8 @@ function HomePageContent() {
           <button
             onClick={toggleUser}
             disabled={profiles.length < 2}
-            className={`flex min-h-11 items-center gap-1.5 px-3 py-2 rounded-2xl border-2 border-slate-800 font-black text-xs shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0px_0px_0px_0px_rgba(15,23,42,1)] transition-all
-              ${currentUser === 'user_a' ? 'bg-amber-200' : 'bg-purple-200'}`}
+            className={`flex min-h-11 items-center gap-1.5 px-3 py-2 rounded-2xl border-2 border-slate-900 font-black text-xs shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0px_0px_0px_0px_rgba(15,23,42,1)] transition-all
+              ${currentUser === 'user_a' ? 'bg-cyan-200' : 'bg-pink-200'}`}
           >
             <User className="w-3.5 h-3.5" />
             <span>{currentProfile?.icon} {currentProfile?.display_name || (currentUser === 'user_a' ? 'ママ' : 'パパ')}</span>
@@ -405,18 +405,18 @@ function HomePageContent() {
       </div>
 
       {dataError && <DataErrorCard message={dataError} onRetry={retryFetch} />}
-      {ownProfileId !== undefined && !canEdit && <p className="flex items-center gap-2 rounded-2xl border-2 border-slate-800 bg-sky-50 px-3 py-2 text-xs font-black text-sky-800"><Eye className="h-4 w-4 shrink-0" />このプロフィールは参照モードです。変更は本人のログインで行ってください。</p>}
+      {ownProfileId !== undefined && !canEdit && <p className="relative z-10 flex items-center gap-2 rounded-2xl border-2 border-slate-800 bg-sky-50 px-3 py-2 text-xs font-black text-sky-800"><Eye className="h-4 w-4 shrink-0" />このプロフィールは参照モードです。変更は本人のログインで行ってください。</p>}
 
-      {!loading && alerts.length > 0 && <section className="flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-orange-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"><h2 className="flex items-center gap-2 text-sm font-black text-orange-800"><Bell className="h-5 w-5" />家計アラート</h2>{alerts.map((item) => <div key={item.key} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700"><span className="min-w-0 flex-1">・{item.message}</span>{canEdit && <button type="button" onClick={() => dismissAlert(item)} disabled={dismissingAlertKey !== null} aria-label={`${item.message}を削除`} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 disabled:opacity-50">{dismissingAlertKey === item.key ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}</button>}</div>)}</section>}
+      {!loading && alerts.length > 0 && <section className="relative z-10 flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-orange-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"><h2 className="flex items-center gap-2 text-sm font-black text-orange-800"><Bell className="h-5 w-5" />家計アラート</h2>{alerts.map((item) => <div key={item.key} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700"><span className="min-w-0 flex-1">・{item.message}</span>{canEdit && <button type="button" onClick={() => dismissAlert(item)} disabled={dismissingAlertKey !== null} aria-label={`${item.message}を削除`} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 disabled:opacity-50">{dismissingAlertKey === item.key ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}</button>}</div>)}</section>}
 
       {/* 押下するとカテゴリ別の支出予算案内を展開する。 */}
       {!dataError && (
-        <div className="flex flex-col gap-4">
+        <div className="relative z-10 flex flex-col gap-4">
           <button
             type="button"
             onClick={() => setIsSummaryOpen((current) => !current)}
             aria-expanded={isSummaryOpen}
-            className="w-full text-left bg-amber-100 border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex items-center justify-between gap-3"
+            className="w-full text-left bg-pink-100 border-2 border-slate-900 rounded-3xl p-5 shadow-[5px_5px_0px_0px_rgba(34,211,238,1)] flex items-center justify-between gap-3"
           >
             <div className="flex flex-col gap-2">
               <p className="text-xs font-bold text-slate-600">
@@ -429,7 +429,7 @@ function HomePageContent() {
                   <>
                     <span className="text-3xl font-black">¥{totalExpense.toLocaleString()}</span>
                     {totalExpense > 0 && (
-                      <span className="text-[10px] font-black bg-white text-slate-700 px-2 py-0.5 rounded-full border border-slate-400">
+                      <span className="text-[10px] font-black bg-yellow-200 text-slate-700 px-2 py-0.5 rounded-full border border-slate-400">
                         ナイス記録！👍
                       </span>
                     )}
@@ -507,15 +507,15 @@ function HomePageContent() {
       {/* 支出予算の全体状況と消化ペース */}
       {!loading && !dataError && hasBudget && (
         <div className="flex flex-col gap-4">
-          <div className={`border-2 border-slate-800 rounded-3xl p-5 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-3 transition-all ${
-            isOverBudget ? 'bg-rose-100' : 'bg-emerald-100/60'
+          <div className={`border-2 border-slate-900 rounded-3xl p-5 shadow-[5px_5px_0px_0px_rgba(236,72,153,1)] flex flex-col gap-3 transition-all ${
+            isOverBudget ? 'bg-pink-100' : 'bg-cyan-100'
           }`}>
             <div className="flex justify-between items-center">
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-black text-slate-700">当月予算: ¥{totalBudget.toLocaleString()}</span>
                 {totalCarryover !== 0 && (
                   <span className={`text-[10px] font-black ${totalCarryover > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                    繰越: {totalCarryover > 0 ? '+' : ''}¥{totalCarryover.toLocaleString()}
+                    TOTAL繰越: {totalCarryover > 0 ? '+' : ''}¥{totalCarryover.toLocaleString()}
                   </span>
                 )}
                 {totalBudgetOffset > 0 && (
