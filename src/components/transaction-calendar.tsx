@@ -76,8 +76,8 @@ export function TransactionCalendar({
               .filter((day): day is number => day !== null)
               .map((day) => `${yearMonth}-${String(day).padStart(2, '0')}`);
             const weekTransactions = transactions.filter((transaction) => weekDateStrings.includes(transaction.date));
-            const weekExpense = weekTransactions
-              .filter((transaction) => transaction.type === 'expense')
+            const weekVariableExpense = weekTransactions
+              .filter((transaction) => transaction.type === 'expense' && transaction.recurring_transaction_id === null)
               .reduce((sum, transaction) => sum + transaction.amount, 0);
             const weekIncome = weekTransactions
               .filter((transaction) => transaction.type === 'income')
@@ -139,7 +139,7 @@ export function TransactionCalendar({
                 </div>
                 <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 bg-yellow-50 px-2 py-1.5 text-[10px] font-black">
                   <span className="rounded-full bg-white px-2 py-0.5 text-slate-500">W{weekIndex + 1}</span>
-                  <span className="truncate text-pink-600">支出 -¥{formatCalendarAmount(weekExpense)}</span>
+                  <span className="truncate text-pink-600">変動費 -¥{formatCalendarAmount(weekVariableExpense)}</span>
                   <span className="truncate text-emerald-600">収入 +¥{formatCalendarAmount(weekIncome)}</span>
                 </div>
               </div>
