@@ -54,6 +54,9 @@ function DashboardPageContent() {
   const [isAddingTransaction, setIsAddingTransaction] = useState(false);
   const [recentCategoryIds, setRecentCategoryIds] = useState<string[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [totalBudget, setTotalBudget] = useState(0);
+  const [totalCarryover, setTotalCarryover] = useState(0);
+  const [totalBudgetOffset, setTotalBudgetOffset] = useState(0);
   const [budgetOffsetEnabled, setBudgetOffsetEnabled] = useState(false);
   const [budgetOffsetType, setBudgetOffsetType] = useState<BudgetOffsetType>('overall');
   const [budgetOffsetCategoryId, setBudgetOffsetCategoryId] = useState('');
@@ -86,7 +89,7 @@ function DashboardPageContent() {
         }
       }
 
-      const [categoryResult, transactionResult, templateResult] = await Promise.all([
+      const [categoryResult, transactionResult, templateResult, budgetResult] = await Promise.all([
         supabase.from('categories').select('*').eq('user_id', currentUser).is('deleted_at', null).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
@@ -96,11 +99,15 @@ function DashboardPageContent() {
           .lte('date', safeEndOfMonth)
           .order('date', { ascending: false }),
         supabase.from('transaction_templates').select('*').eq('user_id', currentUser).order('created_at'),
+        supabase.rpc('get_effective_budgets', {
+          target_user_id: currentUser,
+          target_month: startOfMonth,
+        }),
       ]);
 
       if (ignore) return;
 
-      const error = categoryResult.error || transactionResult.error || templateResult.error;
+      const error = categoryResult.error || transactionResult.error || templateResult.error || budgetResult.error;
       if (error) {
         setDataError('家計簿データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
         setLoading(false);
@@ -109,6 +116,7 @@ function DashboardPageContent() {
 
       const catData = categoryResult.data;
       const transData = transactionResult.data;
+      const budgetData = budgetResult.data || [];
 
       if (catData) {
         setCategories(catData);
@@ -121,6 +129,19 @@ function DashboardPageContent() {
 
       setTransactions(transData || []);
       setTemplates(templateResult.data || []);
+      const incomeBudgetOffsets = (transData || []).filter((item) => item.type === 'income' && item.budget_offset_type !== 'none');
+      const overallBudgetOffset = incomeBudgetOffsets
+        .filter((item) => item.budget_offset_type === 'overall')
+        .reduce((sum, item) => sum + Number(item.amount), 0);
+      const categoryBudgetOffsetTotal = incomeBudgetOffsets
+        .filter((item) => item.budget_offset_type === 'category' && item.budget_offset_category_id)
+        .reduce((sum, item) => sum + Number(item.amount), 0);
+      const normalBudgetOffsetTotal = overallBudgetOffset + categoryBudgetOffsetTotal;
+      const expenseBudgets = budgetData.filter((item) => item.category_type === 'expense');
+      const carryoverAmount = expenseBudgets.reduce((sum, item) => sum + Number(item.carryover_amount), 0);
+      setTotalCarryover(carryoverAmount);
+      setTotalBudgetOffset(normalBudgetOffsetTotal);
+      setTotalBudget(expenseBudgets.reduce((sum, item) => sum + Number(item.base_amount), 0) + carryoverAmount + normalBudgetOffsetTotal);
       setLoading(false);
     };
 
@@ -214,6 +235,7 @@ function DashboardPageContent() {
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
   const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
   const totalBalance = totalIncome - totalExpense;
+  const hasBudgetInfo = totalBudget !== 0 || totalCarryover !== 0 || totalBudgetOffset !== 0;
 
   const applyTemplate = (template: Template) => {
     setCategoryId(template.category_id);
@@ -269,6 +291,24 @@ function DashboardPageContent() {
                 ¥{totalExpense.toLocaleString()}
               </span>
             </div>
+            {hasBudgetInfo && (
+              <div className="col-span-2 grid grid-cols-1 gap-2 rounded-xl border-2 border-slate-800 bg-white/80 p-2 text-left shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] sm:grid-cols-3">
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">支出予算</span>
+                  <span className="mt-0.5 block text-sm font-black text-slate-900">¥{totalBudget.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">TOTAL繰越</span>
+                  <span className={`mt-0.5 block text-sm font-black ${totalCarryover >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {totalCarryover > 0 ? '+' : ''}¥{totalCarryover.toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">臨時収入上乗せ</span>
+                  <span className="mt-0.5 block text-sm font-black text-emerald-700">+¥{totalBudgetOffset.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
