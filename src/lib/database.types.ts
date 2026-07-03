@@ -82,6 +82,7 @@ export type Database = {
           carryover_enabled: boolean
           carryover_start_month: string | null
           created_at: string
+          deleted_at: string | null
           household_id: string
           icon: string | null
           id: string
@@ -94,6 +95,7 @@ export type Database = {
           carryover_enabled?: boolean
           carryover_start_month?: string | null
           created_at?: string
+          deleted_at?: string | null
           household_id?: string
           icon?: string | null
           id?: string
@@ -106,6 +108,7 @@ export type Database = {
           carryover_enabled?: boolean
           carryover_start_month?: string | null
           created_at?: string
+          deleted_at?: string | null
           household_id?: string
           icon?: string | null
           id?: string

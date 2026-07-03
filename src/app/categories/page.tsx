@@ -48,6 +48,7 @@ function CategoriesPageContent() {
         .from('categories')
         .select('*')
         .eq('user_id', currentUser)
+        .is('deleted_at', null)
         .order('sort_order')
         .order('created_at');
 
@@ -172,29 +173,24 @@ function CategoriesPageContent() {
 
   const handleDeleteCategory = async (category: Category) => {
     if (deletingCategoryId) return;
-    if (!await confirmAction(`「${category.name}」を削除しますか？\n関連する予算設定も削除されます。家計簿の記録や定期取引がある場合は削除できません。`)) return;
+    if (!await confirmAction(`「${category.name}」を削除しますか？\n過去の履歴では表示したまま、予算設定・実績入力の候補から外します。`)) return;
 
     setDeletingCategoryId(category.id);
     try {
-      // RPC内でカテゴリをロックし、取引履歴がある場合は削除を拒否する。
-      // 関連予算の削除も同じトランザクションで実行される。
-      const { data: deletedBudgetCount, error } = await supabase
+      // RPC内でカテゴリをロックし、履歴参照を保ったまま論理削除する。
+      // 今後の自動登録を防ぐため、対象カテゴリの定期取引も停止する。
+      const { data: disabledRecurringCount, error } = await supabase
         .rpc('delete_unused_category', { target_category_id: category.id });
 
       if (error) {
-        const message = error.message.includes('transaction records')
-          ? 'このカテゴリには家計簿の記録があるため削除できません。先に記録を別カテゴリへ変更してください。'
-          : error.message.includes('recurring transactions')
-            ? 'このカテゴリは定期取引で使用中のため削除できません。先に定期取引のカテゴリを変更するか、定期取引を削除してください。'
-            : userErrorMessage('削除', error);
-        alert(message);
+        alert(userErrorMessage('削除', error));
       } else {
         setCategories((current) => current.filter((cat) => cat.id !== category.id));
         if (editingCategory?.id === category.id) setEditingCategory(null);
-        const budgetMessage = deletedBudgetCount > 0
-          ? `関連する予算設定 ${deletedBudgetCount} 件も削除しました。`
-          : '関連する予算設定はありませんでした。';
-        notify(`カテゴリを削除しました。${budgetMessage}`);
+        const recurringMessage = disabledRecurringCount > 0
+          ? `関連する定期取引 ${disabledRecurringCount} 件を停止しました。`
+          : '';
+        notify(`カテゴリを削除しました。${recurringMessage}`);
       }
     } catch {
       alert('削除に失敗しました。通信状況を確認して、もう一度お試しください。');

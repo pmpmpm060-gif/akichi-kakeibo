@@ -95,7 +95,7 @@ function HomePageContent() {
       }
 
       const [categoryResult, transactionResult, budgetResult, previousTransactionResult, dismissedAlertResult] = await Promise.all([
-        supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
+        supabase.from('categories').select('*').eq('user_id', currentUser).is('deleted_at', null).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
           .select('*, categories!transactions_category_id_fkey(name, type, icon)')
@@ -292,7 +292,10 @@ function HomePageContent() {
     if (isUpdatingTransaction || !editingTransaction || !canEdit) return;
 
     const selectedCategory = categories.find((category) => category.id === editingTransaction.category_id);
-    if (!selectedCategory) return;
+    const selectedCategoryType = selectedCategory?.type
+      ?? editingTransaction.categories?.type
+      ?? null;
+    if (!selectedCategoryType) return;
 
     const parsedAmount = Number(editingTransaction.amount);
     if (!Number.isSafeInteger(parsedAmount) || parsedAmount <= 0) {
@@ -308,9 +311,9 @@ function HomePageContent() {
           amount: parsedAmount,
           description: editingTransaction.description,
           category_id: editingTransaction.category_id,
-          type: selectedCategory.type,
-          budget_offset_type: selectedCategory.type === 'income' ? editingTransaction.budget_offset_type : 'none',
-          budget_offset_category_id: selectedCategory.type === 'income' ? editingTransaction.budget_offset_category_id : null,
+          type: selectedCategoryType,
+          budget_offset_type: selectedCategoryType === 'income' ? editingTransaction.budget_offset_type : 'none',
+          budget_offset_category_id: selectedCategoryType === 'income' ? editingTransaction.budget_offset_category_id : null,
         })
         .eq('id', editingTransaction.id);
 
@@ -667,6 +670,11 @@ function HomePageContent() {
                     onChange={(event) => setEditingTransaction({ ...editingTransaction, category_id: event.target.value })}
                     className="min-h-12 w-full rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-base font-bold"
                   >
+                    {!categories.some((category) => category.id === editingTransaction.category_id) && editingTransaction.categories && (
+                      <option value={editingTransaction.category_id}>
+                        {editingTransaction.categories.icon || (editingTransaction.categories.type === 'expense' ? '💸' : '💰')} {editingTransaction.categories.name}（削除済み）
+                      </option>
+                    )}
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>{category.icon || (category.type === 'expense' ? '💸' : '💰')} {category.name}</option>
                     ))}

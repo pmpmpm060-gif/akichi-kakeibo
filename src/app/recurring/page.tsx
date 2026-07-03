@@ -45,7 +45,7 @@ function RecurringPageContent() {
 
     const fetchData = async () => {
       const [categoryResult, recurringResult] = await Promise.all([
-        supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
+        supabase.from('categories').select('*').eq('user_id', currentUser).is('deleted_at', null).order('sort_order').order('created_at'),
         supabase
           .from('recurring_transactions')
           .select('*, categories(name, icon, type)')

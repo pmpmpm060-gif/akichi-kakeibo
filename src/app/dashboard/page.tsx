@@ -87,7 +87,7 @@ function DashboardPageContent() {
       }
 
       const [categoryResult, transactionResult, templateResult] = await Promise.all([
-        supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
+        supabase.from('categories').select('*').eq('user_id', currentUser).is('deleted_at', null).order('sort_order').order('created_at'),
         supabase
           .from('transactions')
           .select('*, categories!transactions_category_id_fkey(name, type, icon)')
@@ -144,6 +144,7 @@ function DashboardPageContent() {
 
   const selectedCategory = categories.find((category) => category.id === categoryId);
   const expenseCategories = categories.filter((category) => category.type === 'expense');
+  const activeTemplates = templates.filter((template) => categories.some((category) => category.id === template.category_id));
   const canApplyBudgetOffset = selectedCategory?.type === 'income';
 
   const handleAddTransaction = async (e: React.FormEvent) => {
@@ -280,7 +281,7 @@ function DashboardPageContent() {
         <DataErrorCard message={dataError} onRetry={retryFetch} />
       ) : (
         <>
-          {templates.length > 0 && <section className="flex flex-col gap-2"><h2 className="flex items-center gap-2 text-sm font-black"><Zap className="h-5 w-5 text-amber-500" />テンプレートから入力</h2><div className="flex gap-2 overflow-x-auto pb-1">{templates.map((template) => <button key={template.id} type="button" onClick={() => applyTemplate(template)} className="min-h-12 shrink-0 rounded-xl border-2 border-slate-800 bg-amber-100 px-3 text-xs font-black">{template.name}<span className="ml-1 text-slate-500">¥{template.amount.toLocaleString()}</span></button>)}</div></section>}
+          {activeTemplates.length > 0 && <section className="flex flex-col gap-2"><h2 className="flex items-center gap-2 text-sm font-black"><Zap className="h-5 w-5 text-amber-500" />テンプレートから入力</h2><div className="flex gap-2 overflow-x-auto pb-1">{activeTemplates.map((template) => <button key={template.id} type="button" onClick={() => applyTemplate(template)} className="min-h-12 shrink-0 rounded-xl border-2 border-slate-800 bg-amber-100 px-3 text-xs font-black">{template.name}<span className="ml-1 text-slate-500">¥{template.amount.toLocaleString()}</span></button>)}</div></section>}
           {/* 取引入力フォーム */}
           <form id="transaction-form" onSubmit={handleAddTransaction} className="scroll-mt-4 bg-emerald-50 border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4">
             <h2 className="font-black text-base text-emerald-950 flex items-center gap-1.5">
