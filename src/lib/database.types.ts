@@ -475,6 +475,9 @@ export type Database = {
           category_id: string
           created_at: string
           date: string
+          deleted_at: string | null
+          deleted_by: string | null
+          deletion_reason: string | null
           description: string
           household_id: string
           id: string
@@ -490,6 +493,9 @@ export type Database = {
           category_id: string
           created_at?: string
           date: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deletion_reason?: string | null
           description?: string
           household_id?: string
           id?: string
@@ -505,6 +511,9 @@ export type Database = {
           category_id?: string
           created_at?: string
           date?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deletion_reason?: string | null
           description?: string
           household_id?: string
           id?: string
@@ -540,6 +549,60 @@ export type Database = {
             columns: ["recurring_transaction_id"]
             isOneToOne: false
             referencedRelation: "recurring_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transaction_correction_history: {
+        Row: {
+          action: string
+          after_data: Json | null
+          before_data: Json
+          changed_at: string
+          changed_by: string
+          household_id: string
+          id: string
+          reason: string
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          after_data?: Json | null
+          before_data: Json
+          changed_at?: string
+          changed_by?: string
+          household_id: string
+          id?: string
+          reason: string
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          after_data?: Json | null
+          before_data?: Json
+          changed_at?: string
+          changed_by?: string
+          household_id?: string
+          id?: string
+          reason?: string
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transaction_correction_history_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transaction_correction_history_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -652,6 +715,23 @@ export type Database = {
       }
       setup_personal_household: {
         Args: { display_name: string; household_name: string }
+        Returns: string
+      }
+      update_transaction_with_history: {
+        Args: {
+          correction_reason?: string
+          target_amount: number
+          target_budget_offset_category_id?: string | null
+          target_budget_offset_type?: string
+          target_category_id: string
+          target_date: string
+          target_description: string
+          target_transaction_id: string
+        }
+        Returns: string
+      }
+      void_transaction_with_history: {
+        Args: { correction_reason: string; target_transaction_id: string }
         Returns: string
       }
     }

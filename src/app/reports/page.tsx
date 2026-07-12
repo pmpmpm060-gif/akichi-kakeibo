@@ -19,6 +19,7 @@ async function fetchReportTransactions(currentUser: string, reportStart: string,
     const result = await supabase.from('transactions')
       .select('id, amount, budget_offset_category_id, budget_offset_type, category_id, date, type, recurring_transaction_id')
       .eq('user_id', currentUser)
+      .is('deleted_at', null)
       .gte('date', reportStart)
       .lte('date', reportEnd)
       .order('date')
