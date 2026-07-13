@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Save, Loader2, Repeat2 } from 'lucide-react';
+import { Save, Loader2, Repeat2, Wand2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
@@ -13,6 +13,62 @@ import { userErrorMessage } from '../../lib/user-errors';
 import { AmountCalculator } from '../../components/amount-calculator';
 
 const isValidBudgetAmount = (amount: number) => Number.isSafeInteger(amount) && amount >= 0;
+type BudgetAllocationTransaction = { amount: number; category_id: string };
+
+const HISTORY_MONTH_OPTIONS = [3, 6, 12] as const;
+const ROUND_UNIT_OPTIONS = [1, 100, 1000, 10000] as const;
+
+function localDateString(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function monthLabel(date: Date) {
+  return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+}
+
+function allocateByHistory(
+  totalBudget: number,
+  roundUnit: number,
+  expenseCategories: Category[],
+  transactions: BudgetAllocationTransaction[]
+) {
+  if (expenseCategories.length === 0) return new Map<string, number>();
+
+  const unitsToAllocate = Math.floor(totalBudget / roundUnit);
+  const categoryTotals = new Map(expenseCategories.map((category) => [category.id, 0]));
+  transactions.forEach((transaction) => {
+    if (categoryTotals.has(transaction.category_id)) {
+      categoryTotals.set(transaction.category_id, (categoryTotals.get(transaction.category_id) || 0) + Number(transaction.amount));
+    }
+  });
+
+  const historyTotal = Array.from(categoryTotals.values()).reduce((sum, amount) => sum + amount, 0);
+  const baseShares = expenseCategories.map((category) => {
+    const exactUnits = historyTotal > 0
+      ? ((categoryTotals.get(category.id) || 0) / historyTotal) * unitsToAllocate
+      : unitsToAllocate / expenseCategories.length;
+    return {
+      categoryId: category.id,
+      units: Math.floor(exactUnits),
+      remainder: exactUnits - Math.floor(exactUnits),
+      historyAmount: categoryTotals.get(category.id) || 0,
+    };
+  });
+
+  let remainingUnits = unitsToAllocate - baseShares.reduce((sum, item) => sum + item.units, 0);
+  const rankedShares = [...baseShares].sort((left, right) => {
+    if (right.remainder !== left.remainder) return right.remainder - left.remainder;
+    if (right.historyAmount !== left.historyAmount) return right.historyAmount - left.historyAmount;
+    return left.categoryId.localeCompare(right.categoryId);
+  });
+
+  for (let index = 0; remainingUnits > 0; index += 1) {
+    rankedShares[index % rankedShares.length].units += 1;
+    remainingUnits -= 1;
+  }
+
+  return new Map(baseShares.map((item) => [item.categoryId, item.units * roundUnit]));
+}
 
 function BudgetsPageContent() {
   const searchParams = useSearchParams();
@@ -27,6 +83,11 @@ function BudgetsPageContent() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [hasChanges, setHasChanges] = useState(false);
+  const [autoTotalBudget, setAutoTotalBudget] = useState('');
+  const [historyMonths, setHistoryMonths] = useState<(typeof HISTORY_MONTH_OPTIONS)[number]>(6);
+  const [roundUnit, setRoundUnit] = useState<(typeof ROUND_UNIT_OPTIONS)[number]>(100);
+  const [isAllocatingBudget, setIsAllocatingBudget] = useState(false);
+  const [allocationSummary, setAllocationSummary] = useState<string | null>(null);
 
   useEffect(() => {
     // ユーザー切替前の通信結果が後から返る場合があるため、古い結果は無視する。
@@ -100,6 +161,68 @@ function BudgetsPageContent() {
   const handleTotalCarryoverChange = (enabled: boolean) => {
     setTotalCarryoverEnabled(enabled);
     setHasChanges(true);
+  };
+
+  const handleAutoAllocateBudgets = async () => {
+    if (isAllocatingBudget) return;
+
+    const totalBudget = Number(autoTotalBudget);
+    if (!Number.isSafeInteger(totalBudget) || totalBudget <= 0) {
+      alert('全体の支出予算は1円以上の整数で入力してください。');
+      return;
+    }
+    if (totalBudget % roundUnit !== 0) {
+      alert(`全体の支出予算は${roundUnit.toLocaleString()}円単位で割り切れる金額にしてください。`);
+      return;
+    }
+    if (expenseCategories.length === 0) {
+      alert('支出カテゴリがありません。先にカテゴリを追加してください。');
+      return;
+    }
+
+    const currentMonthStartDate = new Date();
+    currentMonthStartDate.setDate(1);
+    const historyStartDate = new Date(currentMonthStartDate.getFullYear(), currentMonthStartDate.getMonth() - historyMonths, 1);
+    const historyStart = localDateString(historyStartDate);
+    const historyEnd = localDateString(new Date(currentMonthStartDate.getFullYear(), currentMonthStartDate.getMonth(), 0));
+
+    setIsAllocatingBudget(true);
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('category_id, amount')
+        .eq('user_id', currentUser)
+        .eq('type', 'expense')
+        .is('deleted_at', null)
+        .gte('date', historyStart)
+        .lte('date', historyEnd);
+
+      if (error) {
+        alert(userErrorMessage('自動配分', error));
+        return;
+      }
+
+      const allocation = allocateByHistory(totalBudget, roundUnit, expenseCategories, data || []);
+      setBudgets((current) => {
+        const next = { ...current };
+        expenseCategories.forEach((category) => {
+          next[category.id] = allocation.get(category.id) || 0;
+        });
+        return next;
+      });
+      const historyTotal = (data || []).reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+      setAllocationSummary(
+        historyTotal > 0
+          ? `${monthLabel(historyStartDate)}〜${monthLabel(new Date(currentMonthStartDate.getFullYear(), currentMonthStartDate.getMonth() - 1, 1))}の支出実績で配分しました`
+          : `過去${historyMonths}か月の支出実績がないため、支出カテゴリへ均等配分しました`
+      );
+      setHasChanges(true);
+      notify('過去実績から支出予算を配分しました');
+    } catch {
+      alert('自動配分に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setIsAllocatingBudget(false);
+    }
   };
 
   const handleSaveBudgets = async () => {
@@ -221,6 +344,71 @@ function BudgetsPageContent() {
             {expenseCategories.length > 0 && (
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">💸 支出（予算上限）</p>
+                <section className="flex flex-col gap-3 rounded-2xl border-2 border-slate-800 bg-cyan-50 p-3 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
+                  <div className="flex items-center gap-2">
+                    <Wand2 className="h-5 w-5 text-cyan-700" strokeWidth={2.5} />
+                    <h2 className="text-sm font-black text-slate-900">全体予算から自動配分</h2>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <label className="text-xs font-black text-slate-600">全体の支出予算</label>
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          step={roundUnit}
+                          value={autoTotalBudget}
+                          onChange={(event) => setAutoTotalBudget(event.target.value)}
+                          disabled={isSaving || isAllocatingBudget}
+                          placeholder="例: 120000"
+                          className="min-h-12 min-w-0 rounded-xl border-2 border-slate-800 px-3 py-2 text-right text-base font-black disabled:opacity-60"
+                        />
+                        <span className="shrink-0 text-xs font-black text-slate-500">円</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAutoAllocateBudgets}
+                      disabled={isSaving || isAllocatingBudget}
+                      className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-slate-800 bg-slate-900 px-4 text-sm font-black text-white disabled:opacity-60"
+                    >
+                      {isAllocatingBudget ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                      配分する
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex min-w-0 flex-col gap-1">
+                      <span className="text-xs font-black text-slate-600">学習期間</span>
+                      <select
+                        value={historyMonths}
+                        onChange={(event) => setHistoryMonths(Number(event.target.value) as typeof historyMonths)}
+                        disabled={isSaving || isAllocatingBudget}
+                        className="min-h-11 rounded-xl border-2 border-slate-800 bg-white px-3 text-sm font-black disabled:opacity-60"
+                      >
+                        {HISTORY_MONTH_OPTIONS.map((months) => (
+                          <option key={months} value={months}>過去{months}か月</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex min-w-0 flex-col gap-1">
+                      <span className="text-xs font-black text-slate-600">丸め単位</span>
+                      <select
+                        value={roundUnit}
+                        onChange={(event) => setRoundUnit(Number(event.target.value) as typeof roundUnit)}
+                        disabled={isSaving || isAllocatingBudget}
+                        className="min-h-11 rounded-xl border-2 border-slate-800 bg-white px-3 text-sm font-black disabled:opacity-60"
+                      >
+                        {ROUND_UNIT_OPTIONS.map((unit) => (
+                          <option key={unit} value={unit}>{unit.toLocaleString()}円単位</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {allocationSummary && (
+                    <p className="rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs font-bold text-cyan-900">{allocationSummary}</p>
+                  )}
+                </section>
                 <label className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl border-2 border-slate-800 bg-pink-100 px-3 py-2 text-xs font-black text-slate-800 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]">
                   <span className="flex min-w-0 items-center gap-2">
                     <Repeat2 className="h-5 w-5 shrink-0 text-pink-600" />

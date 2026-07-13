@@ -1,5 +1,7 @@
 -- 予算繰越をカテゴリ単位から支出TOTAL単位へ変更する。
 
+alter table public.categories disable trigger prevent_unowned_profile_write_trigger;
+
 with enabled_profiles as (
   select
     household_id,
@@ -25,6 +27,8 @@ set
   carryover_start_month = null
 where type <> 'expense'
   and carryover_enabled;
+
+alter table public.categories enable trigger prevent_unowned_profile_write_trigger;
 
 create or replace function public.get_effective_budgets(target_user_id text, target_month date)
 returns table (category_id uuid, category_type text, base_amount numeric, carryover_amount numeric, amount numeric)
