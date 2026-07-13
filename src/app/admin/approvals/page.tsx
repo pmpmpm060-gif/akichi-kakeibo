@@ -8,11 +8,25 @@ import { supabase } from '../../../lib/supabase';
 import type { Database } from '../../../lib/database.types';
 
 type Approval = Database['public']['Tables']['user_approvals']['Row'];
+type ApprovalWithLastSignIn = Database['public']['Functions']['list_user_approvals_with_last_sign_in']['Returns'][number];
+
+function formatDateTime(value: string | null) {
+  if (!value) return 'まだ利用なし';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '不明';
+  return new Intl.DateTimeFormat('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
 
 export default function ApprovalsPage() {
   const confirm = useConfirm();
   const notify = useToast();
-  const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalWithLastSignIn[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [mutating, setMutating] = useState<string | null>(null);
@@ -26,7 +40,7 @@ export default function ApprovalsPage() {
         setError('この画面を利用する権限がありません。');
         return;
       }
-      const result = await supabase.from('user_approvals').select('*').eq('is_admin', false).order('requested_at', { ascending: false }).limit(200);
+      const result = await supabase.rpc('list_user_approvals_with_last_sign_in');
       if (result.error) setError('利用申請の取得に失敗しました。');
       else setApprovals(result.data || []);
     } catch {
@@ -40,7 +54,7 @@ export default function ApprovalsPage() {
     let ignore = false;
     void Promise.all([
       supabase.rpc('is_app_admin'),
-      supabase.from('user_approvals').select('*').eq('is_admin', false).order('requested_at', { ascending: false }).limit(200),
+      supabase.rpc('list_user_approvals_with_last_sign_in'),
     ]).then(([admin, result]) => {
       if (ignore) return;
       if (admin.error || !admin.data) setError('この画面を利用する権限がありません。');
@@ -94,6 +108,7 @@ export default function ApprovalsPage() {
       {approvals.map((approval) => <article key={approval.user_id} className="rounded-2xl border-2 border-slate-800 bg-white p-4 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
         <p className="break-all text-sm font-black">{approval.email}</p>
         <p className="mt-1 text-xs font-bold text-slate-500">状態：{approval.status === 'pending' ? '承認待ち' : approval.status === 'approved' ? '承認済み' : '却下'}</p>
+        <p className="mt-1 text-xs font-bold text-slate-500">最終利用日：{formatDateTime(approval.last_sign_in_at)}</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button type="button" onClick={() => review(approval, false)} disabled={mutating === approval.user_id} className="flex min-h-11 items-center justify-center gap-1 rounded-xl border-2 border-slate-800 bg-rose-100 text-xs font-black disabled:opacity-50"><X className="h-4 w-4" />却下</button>
           <button type="button" onClick={() => review(approval, true)} disabled={mutating === approval.user_id} className="flex min-h-11 items-center justify-center gap-1 rounded-xl border-2 border-slate-800 bg-emerald-300 text-xs font-black disabled:opacity-50"><Check className="h-4 w-4" />承認</button>

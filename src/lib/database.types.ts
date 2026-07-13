@@ -689,6 +689,19 @@ export type Database = {
           total: number
         }[]
       }
+      list_user_approvals_with_last_sign_in: {
+        Args: never
+        Returns: {
+          email: string
+          is_admin: boolean
+          last_sign_in_at: string | null
+          requested_at: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          user_id: string
+        }[]
+      }
       get_my_approval_status: { Args: never; Returns: string }
       is_app_admin: { Args: never; Returns: boolean }
       is_approved_user: { Args: never; Returns: boolean }
