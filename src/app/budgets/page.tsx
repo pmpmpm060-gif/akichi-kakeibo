@@ -194,6 +194,7 @@ function BudgetsPageContent() {
         .eq('user_id', currentUser)
         .eq('type', 'expense')
         .is('deleted_at', null)
+        .is('recurring_transaction_id', null)
         .gte('date', historyStart)
         .lte('date', historyEnd);
 
