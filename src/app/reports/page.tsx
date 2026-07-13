@@ -2,15 +2,18 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ChevronLeft, ChevronRight, Loader2, Save, TrendingDown, TrendingUp } from 'lucide-react';
 import { DataErrorCard } from '../../components/data-error-card';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import type { Budget, Category, Transaction } from '../../lib/database-helpers';
-import { useHorizontalSwipe } from '../../components/mobile-ui';
-import { AppHeader } from '../../components/mobile-ui';
+import { AppHeader, useHorizontalSwipe, useToast } from '../../components/mobile-ui';
+import { useCurrentProfileId } from '../../lib/household-profiles';
+import { userErrorMessage } from '../../lib/user-errors';
+import type { Database } from '../../lib/database.types';
 
 type ReportTransaction = Pick<Transaction, 'id' | 'amount' | 'budget_offset_category_id' | 'budget_offset_type' | 'category_id' | 'date' | 'type' | 'recurring_transaction_id'>;
+type CarryoverAdjustment = Database['public']['Tables']['carryover_adjustments']['Row'];
 const PAGE_SIZE = 1000;
 
 async function fetchReportTransactions(currentUser: string, reportStart: string, reportEnd: string) {
@@ -44,15 +47,21 @@ function monthDiff(startMonth: string, endMonth: string) {
 function ReportsPageContent() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const ownProfileId = useCurrentProfileId();
+  const canEdit = ownProfileId === currentUser;
+  const notify = useToast();
   const [transactions, setTransactions] = useState<ReportTransaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<Pick<Budget, 'category_id' | 'amount'>[]>([]);
+  const [carryoverAdjustments, setCarryoverAdjustments] = useState<CarryoverAdjustment[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [reportMode, setReportMode] = useState<'monthly' | 'yearly'>('monthly');
   const [includeFixedExpenses, setIncludeFixedExpenses] = useState(false);
+  const [adjustmentDrafts, setAdjustmentDrafts] = useState<Record<string, { amount: string; reason: string }>>({});
+  const [isSavingAdjustment, setIsSavingAdjustment] = useState(false);
 
   const currentMonth = monthKey(selectedDate);
   const previousDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1);
@@ -63,9 +72,10 @@ function ReportsPageContent() {
   useEffect(() => {
     let ignore = false;
     const fetchData = async () => {
-      const [categoryResult, budgetSettingResult] = await Promise.all([
+      const [categoryResult, budgetSettingResult, adjustmentResult] = await Promise.all([
         supabase.from('categories').select('*').eq('user_id', currentUser).order('sort_order').order('created_at'),
         supabase.from('budgets').select('category_id, amount').eq('user_id', currentUser),
+        supabase.from('carryover_adjustments').select('*').eq('user_id', currentUser).gte('month', reportStart).lte('month', reportEnd),
       ]);
       if (ignore) return;
       const carryoverStart = (categoryResult.data || [])
@@ -75,12 +85,13 @@ function ReportsPageContent() {
       const transactionStart = carryoverStart && carryoverStart < reportStart ? carryoverStart : reportStart;
       const transactionResult = await fetchReportTransactions(currentUser, transactionStart, reportEnd);
       if (ignore) return;
-      const error = transactionResult.error || categoryResult.error || budgetSettingResult.error;
+      const error = transactionResult.error || categoryResult.error || budgetSettingResult.error || adjustmentResult.error;
       if (error) setDataError('レポートの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
       else {
         setTransactions(transactionResult.data || []);
         setCategories(categoryResult.data || []);
         setBudgets(budgetSettingResult.data || []);
+        setCarryoverAdjustments(adjustmentResult.data || []);
       }
       setLoading(false);
     };
@@ -101,8 +112,10 @@ function ReportsPageContent() {
   const monthlyBudgetOffset = incomeBudgetOffsets.reduce((sum, transaction) => sum + transaction.amount, 0);
   const activeExpenseCategories = categories.filter((category) => category.type === 'expense' && category.deleted_at === null);
   const budgetAmountByCategory = new Map(budgets.map((budget) => [budget.category_id, Number(budget.amount)]));
+  const adjustmentByMonth = new Map(carryoverAdjustments.map((adjustment) => [adjustment.month.slice(0, 7), adjustment]));
   const calculateCarryover = (targetMonth: string) => {
     const targetMonthStart = `${targetMonth}-01`;
+    const monthAdjustment = adjustmentByMonth.get(targetMonth);
     return activeExpenseCategories.reduce(
       (summary, category) => {
         const carryoverStartMonth = category.carryover_start_month;
@@ -124,18 +137,23 @@ function ReportsPageContent() {
           budgetTotal: summary.budgetTotal + budgetTotal,
           spentTotal: summary.spentTotal + spentTotal,
           amount: summary.amount + budgetTotal - spentTotal,
+          adjustment: summary.adjustment,
           startMonth: summary.startMonth === null || carryoverStartMonth < summary.startMonth ? carryoverStartMonth : summary.startMonth,
         };
       },
-      { budgetTotal: 0, spentTotal: 0, amount: 0, startMonth: null as string | null }
+      { budgetTotal: 0, spentTotal: 0, amount: monthAdjustment?.amount || 0, adjustment: monthAdjustment?.amount || 0, startMonth: null as string | null }
     );
   };
   const previousCarryover = calculateCarryover(previousMonth);
   const currentCarryover = calculateCarryover(currentMonth);
+  const currentAdjustment = adjustmentByMonth.get(currentMonth) || null;
   const monthlyBaseBudget = activeExpenseCategories.reduce((sum, category) => sum + (budgetAmountByCategory.get(category.id) || 0), 0);
   const monthlyCarryover = currentCarryover.amount;
   const monthlyTotalBudget = monthlyBaseBudget + monthlyCarryover + monthlyBudgetOffset;
   const hasMonthlyBudget = monthlyBaseBudget !== 0 || monthlyCarryover !== 0 || monthlyBudgetOffset !== 0 || previousCarryover.amount !== 0;
+  const currentAdjustmentDraft = adjustmentDrafts[currentMonth];
+  const adjustmentAmount = currentAdjustmentDraft?.amount ?? (currentAdjustment && currentAdjustment.amount !== 0 ? String(currentAdjustment.amount) : '');
+  const adjustmentReason = currentAdjustmentDraft?.reason ?? currentAdjustment?.reason ?? '';
   const previousExpense = previousTransactions.filter((transaction) => transaction.type === 'expense').reduce((sum, transaction) => sum + transaction.amount, 0);
   const expenseDifference = currentExpense - previousExpense;
   const expenseChangePercent = previousExpense > 0 ? Math.round((expenseDifference / previousExpense) * 100) : null;
@@ -176,6 +194,59 @@ function ReportsPageContent() {
     setDataError(null);
     setSelectedDate((current) => new Date(current.getFullYear(), current.getMonth() + increment, 1));
   };
+
+  const updateCurrentAdjustmentDraft = (nextDraft: Partial<{ amount: string; reason: string }>) => {
+    setAdjustmentDrafts((current) => ({
+      ...current,
+      [currentMonth]: {
+        amount: adjustmentAmount,
+        reason: adjustmentReason,
+        ...nextDraft,
+      },
+    }));
+  };
+
+  const saveCarryoverAdjustment = async () => {
+    if (isSavingAdjustment || !canEdit) return;
+    const parsedAmount = adjustmentAmount === '' ? 0 : Number(adjustmentAmount);
+    if (!Number.isSafeInteger(parsedAmount) || parsedAmount < -1000000000 || parsedAmount > 1000000000) {
+      alert('繰越調整額は-10億円以上、10億円以下の整数で入力してください。');
+      return;
+    }
+    const normalizedReason = adjustmentReason.trim();
+    if (!normalizedReason) {
+      alert('繰越調整の理由を入力してください。');
+      return;
+    }
+
+    setIsSavingAdjustment(true);
+    try {
+      const { error } = await supabase.rpc('save_carryover_adjustment', {
+        target_user_id: currentUser,
+        target_month: `${currentMonth}-01`,
+        target_amount: parsedAmount,
+        adjustment_reason: normalizedReason,
+      });
+      if (error) {
+        alert(userErrorMessage('繰越調整の保存', error));
+        return;
+      }
+      notify('繰越調整を保存しました');
+      setAdjustmentDrafts((current) => {
+        const next = { ...current };
+        delete next[currentMonth];
+        return next;
+      });
+      setLoading(true);
+      setDataError(null);
+      setRetryKey((current) => current + 1);
+    } catch {
+      alert('繰越調整の保存に失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setIsSavingAdjustment(false);
+    }
+  };
+
   const reportSwipe = useHorizontalSwipe(
     () => changeMonth(reportMode === 'monthly' ? -1 : -12),
     () => changeMonth(reportMode === 'monthly' ? 1 : 12)
@@ -237,7 +308,49 @@ function ReportsPageContent() {
                   <span>支出累計: ¥{currentCarryover.spentTotal.toLocaleString()}</span>
                   <span className={monthlyCarryover >= 0 ? 'text-emerald-700' : 'text-rose-600'}>差額: {monthlyCarryover > 0 ? '+' : ''}¥{monthlyCarryover.toLocaleString()}</span>
                 </div>
+                {currentCarryover.adjustment !== 0 && (
+                  <p className={`mt-1 text-xs font-black ${currentCarryover.adjustment >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    繰越調整: {currentCarryover.adjustment > 0 ? '+' : ''}¥{currentCarryover.adjustment.toLocaleString()}
+                  </p>
+                )}
               </div>
+              {canEdit && (
+                <div className="col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-amber-700">繰越調整</p>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        step="1"
+                        value={adjustmentAmount}
+                        onChange={(event) => updateCurrentAdjustmentDraft({ amount: event.target.value })}
+                        disabled={isSavingAdjustment}
+                        placeholder="例: -3000"
+                        className="min-h-11 min-w-0 rounded-xl border-2 border-slate-800 bg-white px-3 text-right text-sm font-black disabled:opacity-60"
+                      />
+                      <span className="shrink-0 text-xs font-black text-slate-500">円</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={saveCarryoverAdjustment}
+                      disabled={isSavingAdjustment}
+                      className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border-2 border-slate-800 bg-slate-900 px-3 text-xs font-black text-white disabled:opacity-60"
+                    >
+                      {isSavingAdjustment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      保存
+                    </button>
+                  </div>
+                  <textarea
+                    value={adjustmentReason}
+                    maxLength={500}
+                    onChange={(event) => updateCurrentAdjustmentDraft({ reason: event.target.value })}
+                    disabled={isSavingAdjustment}
+                    placeholder="例: 前月の現金残高確認により補正"
+                    className="mt-2 min-h-20 w-full resize-none rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-sm font-bold disabled:opacity-60"
+                  />
+                </div>
+              )}
             </div>
           )}
         </section>

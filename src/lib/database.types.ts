@@ -127,6 +127,104 @@ export type Database = {
           },
         ]
       }
+      carryover_adjustment_history: {
+        Row: {
+          adjustment_id: string | null
+          after_amount: number
+          after_reason: string
+          before_amount: number | null
+          before_reason: string | null
+          changed_at: string
+          changed_by: string
+          household_id: string
+          id: string
+          month: string
+          user_id: string
+        }
+        Insert: {
+          adjustment_id?: string | null
+          after_amount: number
+          after_reason: string
+          before_amount?: number | null
+          before_reason?: string | null
+          changed_at?: string
+          changed_by?: string
+          household_id: string
+          id?: string
+          month: string
+          user_id: string
+        }
+        Update: {
+          adjustment_id?: string | null
+          after_amount?: number
+          after_reason?: string
+          before_amount?: number | null
+          before_reason?: string | null
+          changed_at?: string
+          changed_by?: string
+          household_id?: string
+          id?: string
+          month?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "carryover_adjustment_history_adjustment_id_fkey"
+            columns: ["adjustment_id"]
+            isOneToOne: false
+            referencedRelation: "carryover_adjustments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "carryover_adjustment_history_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      carryover_adjustments: {
+        Row: {
+          amount: number
+          household_id: string
+          id: string
+          month: string
+          reason: string
+          updated_at: string
+          updated_by: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          household_id?: string
+          id?: string
+          month: string
+          reason: string
+          updated_at?: string
+          updated_by?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          household_id?: string
+          id?: string
+          month?: string
+          reason?: string
+          updated_at?: string
+          updated_by?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "carryover_adjustments_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dismissed_alerts: {
         Row: {
           alert_key: string
@@ -721,6 +819,15 @@ export type Database = {
       save_category_order: {
         Args: { category_ids: string[]; target_user_id: string }
         Returns: undefined
+      }
+      save_carryover_adjustment: {
+        Args: {
+          adjustment_reason: string
+          target_amount: number
+          target_month: string
+          target_user_id: string
+        }
+        Returns: string
       }
       save_user_budgets: {
         Args: { budget_entries: Json; target_user_id: string }
