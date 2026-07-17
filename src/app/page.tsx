@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Sparkles, Loader2, AlertTriangle, CheckCircle2, User, RefreshCw, CalendarDays, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, Bell, X, Eye, Trash2 } from 'lucide-react';
+import { Sparkles, Loader2, User, RefreshCw, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, Bell, X, Eye, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DataErrorCard } from '../components/data-error-card';
 import { parseHouseholdUser, type HouseholdUser } from '../lib/household-users';
@@ -443,30 +443,76 @@ function HomePageContent() {
             type="button"
             onClick={() => setIsSummaryOpen((current) => !current)}
             aria-expanded={isSummaryOpen}
-            className="w-full text-left bg-pink-100 border-2 border-slate-900 rounded-3xl p-5 shadow-[5px_5px_0px_0px_rgba(34,211,238,1)] flex items-center justify-between gap-3"
+            className={`w-full text-left border-2 border-slate-900 rounded-3xl p-5 shadow-[5px_5px_0px_0px_rgba(34,211,238,1)] flex items-start justify-between gap-3 ${
+              !loading && hasBudget && isOverBudget ? 'bg-rose-100' : 'bg-pink-100'
+            }`}
           >
-            <div className="flex flex-col gap-2">
+            <div className="min-w-0 flex-1 flex flex-col gap-3">
               <p className="text-xs font-bold text-slate-600">
                 【{currentProfile?.display_name || (currentUser === 'user_a' ? 'ママ' : 'パパ')}】今月使ったお金
               </p>
-              <div className="flex items-baseline gap-2">
-                {loading ? (
-                  <Loader2 className="w-6 h-6 text-slate-500 animate-spin" />
-                ) : (
-                  <>
+              {loading ? (
+                <Loader2 className="w-6 h-6 text-slate-500 animate-spin" />
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-end gap-2">
                     <span className="text-3xl font-black">¥{totalExpense.toLocaleString()}</span>
                     {totalExpense > 0 && (
-                      <span className="text-[10px] font-black bg-yellow-200 text-slate-700 px-2 py-0.5 rounded-full border border-slate-400">
+                      <span className="mb-1 text-[10px] font-black bg-yellow-200 text-slate-700 px-2 py-0.5 rounded-full border border-slate-400">
                         ナイス記録！👍
                       </span>
                     )}
-                  </>
-                )}
-              </div>
-              {!loading && hasBudget && (
-                <p className={`text-sm font-black ${isOverBudget ? 'text-rose-600' : 'text-emerald-700'}`}>
-                  {isOverBudget ? '予算超過' : 'あと使える'}: ¥{Math.abs(remainingBudget).toLocaleString()}
-                </p>
+                    {hasBudget && (
+                      <span className={`mb-1 text-[10px] font-black bg-white px-2 py-0.5 rounded-full border ${isOverBudget ? 'border-rose-400 text-rose-700' : 'border-emerald-400 text-emerald-700'}`}>
+                        {isOverBudget ? '予算オーバー' : '予算内'}
+                      </span>
+                    )}
+                  </div>
+                  {hasBudget && (
+                    <div className="grid grid-cols-2 gap-2 rounded-2xl border-2 border-slate-800 bg-white/80 p-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">あと使える</p>
+                        <p className={`mt-0.5 text-base font-black ${isOverBudget ? 'text-rose-600' : 'text-emerald-700'}`}>
+                          {isOverBudget ? '+' : ''}¥{Math.abs(remainingBudget).toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">当月予算</p>
+                        <p className="mt-0.5 text-base font-black text-slate-900">¥{totalBudget.toLocaleString()}</p>
+                      </div>
+                      <div className="col-span-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-black">
+                        {totalCarryover !== 0 && (
+                          <span className={totalCarryover > 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                            TOTAL繰越: {totalCarryover > 0 ? '+' : ''}¥{totalCarryover.toLocaleString()}
+                          </span>
+                        )}
+                        {totalBudgetOffset > 0 && (
+                          <span className="text-emerald-700">
+                            臨時収入上乗せ: +¥{totalBudgetOffset.toLocaleString()}
+                          </span>
+                        )}
+                        {!isVariableOverBudget && (
+                          <span className="text-slate-600">
+                            変動費目安: ¥{dailyRemaining.toLocaleString()}/日
+                          </span>
+                        )}
+                      </div>
+                      <div className="col-span-2 h-3 overflow-hidden rounded-full border-2 border-slate-800 bg-white">
+                        <div
+                          className={`h-full border-r border-slate-800 transition-all duration-500 ${isOverBudget ? 'bg-rose-400' : 'bg-emerald-400'}`}
+                          style={{
+                            width: `${totalBudget > 0
+                              ? Math.max(0, Math.min((totalExpense / totalBudget) * 100, 100))
+                              : 100}%`
+                          }}
+                        />
+                      </div>
+                      <p className="col-span-2 text-[10px] font-bold text-slate-500">
+                        残り {remainingDays} 日 / {daysInMonth}日中
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
             {!loading && (
@@ -531,77 +577,9 @@ function HomePageContent() {
         </div>
       )}
 
-      {/* 支出予算の全体状況と消化ペース */}
+      {/* 当月の記録カレンダーと消化ペース */}
       {!loading && !dataError && hasBudget && (
         <div className="flex flex-col gap-4">
-          <div className={`border-2 border-slate-900 rounded-3xl p-5 shadow-[5px_5px_0px_0px_rgba(236,72,153,1)] flex flex-col gap-3 transition-all ${
-            isOverBudget ? 'bg-pink-100' : 'bg-cyan-100'
-          }`}>
-            <div className="flex justify-between items-center">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-black text-slate-700">当月予算: ¥{totalBudget.toLocaleString()}</span>
-                {totalCarryover !== 0 && (
-                  <span className={`text-[10px] font-black ${totalCarryover > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                    TOTAL繰越: {totalCarryover > 0 ? '+' : ''}¥{totalCarryover.toLocaleString()}
-                  </span>
-                )}
-                {totalBudgetOffset > 0 && (
-                  <span className="text-[10px] font-black text-emerald-700">
-                    臨時収入の上乗せ: +¥{totalBudgetOffset.toLocaleString()}
-                  </span>
-                )}
-              </div>
-              {isOverBudget ? (
-                <span className="text-[10px] font-black text-rose-700 bg-white border border-rose-400 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3 text-rose-500" /> 予算オーバー！
-                </span>
-              ) : (
-                <span className="text-[10px] font-black text-emerald-700 bg-white border border-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-500" /> セーフ！
-                </span>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-0.5">
-              <p className="text-xs font-bold text-slate-600">
-                {isOverBudget ? '使いすぎているお金' : 'あと使えるお金'}
-              </p>
-              <div className="text-2xl font-black tracking-tight flex items-baseline gap-2">
-                <span>
-                  {isOverBudget 
-                    ? `+¥${Math.abs(remainingBudget).toLocaleString()}` 
-                    : `¥${remainingBudget.toLocaleString()}`
-                  }
-                </span>
-                <span className="text-xs font-bold text-slate-500">
-                  (残り {remainingDays} 日 / {daysInMonth}日中)
-                </span>
-              </div>
-            </div>
-
-            {!isVariableOverBudget && (
-              <div className="bg-white/80 border-2 border-dashed border-slate-700 rounded-2xl p-2.5 flex items-center justify-between text-xs mt-1">
-                <span className="font-bold text-slate-600 flex items-center gap-1">
-                  <CalendarDays className="w-4 h-4 text-slate-700" /> 変動費の日当たり目安:
-                </span>
-                <span className="font-black text-sm text-slate-900">
-                  ¥{dailyRemaining.toLocaleString()} <span className="text-[10px] text-slate-500">/ 日</span>
-                </span>
-              </div>
-            )}
-
-            <div className="w-full bg-white h-3 rounded-full border-2 border-slate-800 overflow-hidden mt-1">
-              <div 
-                className={`h-full border-r border-slate-800 transition-all duration-500 ${isOverBudget ? 'bg-rose-400' : 'bg-emerald-400'}`}
-                style={{
-                  width: `${totalBudget > 0
-                    ? Math.max(0, Math.min((totalExpense / totalBudget) * 100, 100))
-                    : 100}%`
-                }}
-              />
-            </div>
-          </div>
-
           {/* 当月の記録カレンダー */}
           <TransactionCalendar
             currentDate={currentMonthDate}
