@@ -149,6 +149,7 @@ function ReportsPageContent() {
   const currentAdjustment = adjustmentByMonth.get(currentMonth) || null;
   const monthlyBaseBudget = activeExpenseCategories.reduce((sum, category) => sum + (budgetAmountByCategory.get(category.id) || 0), 0);
   const monthlyCarryover = currentCarryover.amount;
+  const monthlyCarryoverBaseDifference = currentCarryover.amount - currentCarryover.adjustment;
   const monthlyTotalBudget = monthlyBaseBudget + monthlyCarryover + monthlyBudgetOffset;
   const hasMonthlyBudget = monthlyBaseBudget !== 0 || monthlyCarryover !== 0 || monthlyBudgetOffset !== 0 || previousCarryover.amount !== 0;
   const currentAdjustmentDraft = adjustmentDrafts[currentMonth];
@@ -290,7 +291,7 @@ function ReportsPageContent() {
                 <p className={`mt-1 text-sm font-black ${previousCarryover.amount >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{previousCarryover.amount > 0 ? '+' : ''}¥{previousCarryover.amount.toLocaleString()}</p>
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">当月のTOTAL繰越</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">当月に反映するTOTAL繰越</p>
                 <p className={`mt-1 text-sm font-black ${monthlyCarryover >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{monthlyCarryover > 0 ? '+' : ''}¥{monthlyCarryover.toLocaleString()}</p>
               </div>
               <div>
@@ -302,11 +303,11 @@ function ReportsPageContent() {
                 <p className="mt-1 text-sm font-black text-slate-700">{currentCarryover.startMonth?.slice(0, 7).replace('-', '年') || '未設定'}{currentCarryover.startMonth ? '月' : ''}</p>
               </div>
               <div className="col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">当月繰越の根拠</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">前月までの繰越根拠</p>
                 <div className="mt-1 grid grid-cols-1 gap-1 text-xs font-bold text-slate-600 sm:grid-cols-3">
                   <span>予算累計: ¥{currentCarryover.budgetTotal.toLocaleString()}</span>
                   <span>支出累計: ¥{currentCarryover.spentTotal.toLocaleString()}</span>
-                  <span className={monthlyCarryover >= 0 ? 'text-emerald-700' : 'text-rose-600'}>差額: {monthlyCarryover > 0 ? '+' : ''}¥{monthlyCarryover.toLocaleString()}</span>
+                  <span className={monthlyCarryoverBaseDifference >= 0 ? 'text-emerald-700' : 'text-rose-600'}>前月までの差額: {monthlyCarryoverBaseDifference > 0 ? '+' : ''}¥{monthlyCarryoverBaseDifference.toLocaleString()}</span>
                 </div>
                 {currentCarryover.adjustment !== 0 && (
                   <p className={`mt-1 text-xs font-black ${currentCarryover.adjustment >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
