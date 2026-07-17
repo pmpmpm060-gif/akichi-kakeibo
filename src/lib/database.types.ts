@@ -705,6 +705,24 @@ export type Database = {
           },
         ]
       }
+      user_operation_activity: {
+        Row: {
+          last_operated_at: string
+          last_path: string
+          user_id: string
+        }
+        Insert: {
+          last_operated_at?: string
+          last_path?: string
+          user_id: string
+        }
+        Update: {
+          last_operated_at?: string
+          last_path?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_approvals: {
         Row: {
           email: string
@@ -800,6 +818,19 @@ export type Database = {
           user_id: string
         }[]
       }
+      list_user_approvals_with_last_operation: {
+        Args: never
+        Returns: {
+          email: string
+          is_admin: boolean
+          last_operation_at: string | null
+          requested_at: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          user_id: string
+        }[]
+      }
       get_my_approval_status: { Args: never; Returns: string }
       is_app_admin: { Args: never; Returns: boolean }
       is_approved_user: { Args: never; Returns: boolean }
@@ -828,6 +859,10 @@ export type Database = {
           target_user_id: string
         }
         Returns: string
+      }
+      touch_user_operation: {
+        Args: { operation_path: string }
+        Returns: undefined
       }
       save_user_budgets: {
         Args: { budget_entries: Json; target_user_id: string }

@@ -85,6 +85,13 @@ export async function proxy(req: NextRequest) {
   if (membershipError || approvalError) return serviceUnavailable();
   const isApprovalPage = req.nextUrl.pathname === '/approval-pending';
 
+  // 最終操作はログイン日時ではなく、保護画面へ到達したアプリ操作として記録する。
+  try {
+    await supabase.rpc('touch_user_operation', { operation_path: req.nextUrl.pathname });
+  } catch {
+    // 最終操作の記録失敗は、認証済み画面への到達自体は妨げない。
+  }
+
   if (!approved && !isApprovalPage) {
     return redirect('/approval-pending');
   }
