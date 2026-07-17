@@ -348,71 +348,6 @@ function DashboardPageContent() {
     <div className="flex flex-col gap-6 px-4 py-5">
       <AppHeader title="家計簿を付ける" currentUser={currentUser} />
 
-      {/* 月選択と選択月の集計 */}
-      <div {...monthSwipe} className="bg-emerald-100 border-2 border-slate-800 rounded-3xl p-3 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <button aria-label="前の月" onClick={() => changeMonth(-1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border-2 border-slate-800 bg-white active:bg-slate-100">
-            <ChevronLeft className="w-6 h-6 text-slate-800" strokeWidth={2.5} />
-          </button>
-          <span className="font-black text-lg text-emerald-950">
-            {jstYear}年{Number(jstMonth)}月
-          </span>
-          <button aria-label="次の月" onClick={() => changeMonth(1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border-2 border-slate-800 bg-white active:bg-slate-100">
-            <ChevronRight className="w-6 h-6 text-slate-800" strokeWidth={2.5} />
-          </button>
-        </div>
-        <div className="flex items-center justify-between border-t-2 border-slate-800 pt-3 px-1">
-          <span className="font-black text-sm text-slate-700 flex items-center gap-1.5">
-            <Wallet className="w-4 h-4" /> 収支残高
-          </span>
-          {loading ? (
-            <Loader2 className="w-5 h-5 text-emerald-700 animate-spin" />
-          ) : (
-            <span className={`text-xl font-black ${totalBalance >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-              ¥{totalBalance.toLocaleString()}
-            </span>
-          )}
-        </div>
-        {!loading && (
-          <div className="grid grid-cols-2 gap-3 text-center">
-            <div className="bg-white border-2 border-slate-800 rounded-xl p-2 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-              <span className="text-[10px] font-black text-slate-400 flex items-center justify-center gap-0.5 uppercase tracking-wider">
-                <ArrowUpRight className="w-3 h-3 text-emerald-500" strokeWidth={3} /> 総収入
-              </span>
-              <span className="text-sm font-black text-emerald-700 mt-1 block">
-                ¥{totalIncome.toLocaleString()}
-              </span>
-            </div>
-            <div className="bg-white border-2 border-slate-800 rounded-xl p-2 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
-              <span className="text-[10px] font-black text-slate-400 flex items-center justify-center gap-0.5 uppercase tracking-wider">
-                <ArrowDownRight className="w-3 h-3 text-rose-400" strokeWidth={3} /> 総支出
-              </span>
-              <span className="text-sm font-black text-rose-600 mt-1 block">
-                ¥{totalExpense.toLocaleString()}
-              </span>
-            </div>
-            {hasBudgetInfo && (
-              <div className="col-span-2 grid grid-cols-1 gap-2 rounded-xl border-2 border-slate-800 bg-white/80 p-2 text-left shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] sm:grid-cols-3">
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">支出予算</span>
-                  <span className="mt-0.5 block text-sm font-black text-slate-900">¥{totalBudget.toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">TOTAL繰越</span>
-                  <span className={`mt-0.5 block text-sm font-black ${totalCarryover >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                    {totalCarryover > 0 ? '+' : ''}¥{totalCarryover.toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">臨時収入上乗せ</span>
-                  <span className="mt-0.5 block text-sm font-black text-emerald-700">+¥{totalBudgetOffset.toLocaleString()}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
@@ -514,6 +449,65 @@ function DashboardPageContent() {
                 : '記録する！ ✨'}
             </button>
           </form>
+
+          {/* 月選択と選択月の集計 */}
+          <div {...monthSwipe} className="bg-emerald-100 border-2 border-slate-800 rounded-3xl p-3 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <button aria-label="前の月" onClick={() => changeMonth(-1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border-2 border-slate-800 bg-white active:bg-slate-100">
+                <ChevronLeft className="w-6 h-6 text-slate-800" strokeWidth={2.5} />
+              </button>
+              <span className="font-black text-lg text-emerald-950">
+                {jstYear}年{Number(jstMonth)}月
+              </span>
+              <button aria-label="次の月" onClick={() => changeMonth(1)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border-2 border-slate-800 bg-white active:bg-slate-100">
+                <ChevronRight className="w-6 h-6 text-slate-800" strokeWidth={2.5} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between border-t-2 border-slate-800 pt-3 px-1">
+              <span className="font-black text-sm text-slate-700 flex items-center gap-1.5">
+                <Wallet className="w-4 h-4" /> 収支残高
+              </span>
+              <span className={`text-xl font-black ${totalBalance >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                ¥{totalBalance.toLocaleString()}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-center">
+              <div className="bg-white border-2 border-slate-800 rounded-xl p-2 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+                <span className="text-[10px] font-black text-slate-400 flex items-center justify-center gap-0.5 uppercase tracking-wider">
+                  <ArrowUpRight className="w-3 h-3 text-emerald-500" strokeWidth={3} /> 総収入
+                </span>
+                <span className="text-sm font-black text-emerald-700 mt-1 block">
+                  ¥{totalIncome.toLocaleString()}
+                </span>
+              </div>
+              <div className="bg-white border-2 border-slate-800 rounded-xl p-2 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]">
+                <span className="text-[10px] font-black text-slate-400 flex items-center justify-center gap-0.5 uppercase tracking-wider">
+                  <ArrowDownRight className="w-3 h-3 text-rose-400" strokeWidth={3} /> 総支出
+                </span>
+                <span className="text-sm font-black text-rose-600 mt-1 block">
+                  ¥{totalExpense.toLocaleString()}
+                </span>
+              </div>
+              {hasBudgetInfo && (
+                <div className="col-span-2 grid grid-cols-1 gap-2 rounded-xl border-2 border-slate-800 bg-white/80 p-2 text-left shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] sm:grid-cols-3">
+                  <div>
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">支出予算</span>
+                    <span className="mt-0.5 block text-sm font-black text-slate-900">¥{totalBudget.toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">TOTAL繰越</span>
+                    <span className={`mt-0.5 block text-sm font-black ${totalCarryover >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                      {totalCarryover > 0 ? '+' : ''}¥{totalCarryover.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">臨時収入上乗せ</span>
+                    <span className="mt-0.5 block text-sm font-black text-emerald-700">+¥{totalBudgetOffset.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-black text-slate-800">{Number(jstMonth)}月の記録</h2>
