@@ -446,7 +446,7 @@ function DashboardPageContent() {
             <button type="submit" disabled={isAddingTransaction} className="w-full bg-slate-900 text-white font-black py-3 rounded-2xl border-2 border-slate-800 text-sm mt-1 disabled:opacity-60 flex items-center justify-center gap-2">
               {isAddingTransaction
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> 記録中...</>
-                : '記録する！ ✨'}
+                : '記録する'}
             </button>
           </form>
 

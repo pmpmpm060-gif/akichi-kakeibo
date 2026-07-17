@@ -57,7 +57,7 @@ export function TransactionCalendar({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="px-1 text-xs font-black uppercase tracking-widest text-pink-500">今月の記録カレンダー 📅</p>
+      <p className="px-1 text-xs font-black uppercase tracking-widest text-pink-500">今月の記録カレンダー</p>
 
       <div className="rounded-3xl border-2 border-slate-900 bg-white p-4 shadow-[5px_5px_0px_0px_rgba(236,72,153,1)]">
         <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs font-black">

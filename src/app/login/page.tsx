@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { Loader2, Lock, Mail, Sparkles } from 'lucide-react';
+import { Loader2, Lock, Mail } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 export default function LoginPage() {
@@ -79,13 +79,10 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col justify-center gap-8 bg-amber-50/50 px-4 py-5">
       <div className="text-center">
-        <span className="text-xs font-bold uppercase tracking-wider text-amber-600 bg-amber-100 px-2.5 py-1 rounded-full inline-flex items-center gap-1">
-          <Sparkles className="w-3 h-3" /> Welcome Back!
-        </span>
         <h1 className="text-4xl font-black mt-2 tracking-tight text-slate-800">
           ぽっぷ<span className="text-emerald-500">家計簿</span>
         </h1>
-        <p className="text-xs font-bold text-slate-400 mt-2">一度ログインすれば次からは自動で開くよ！ 🐷</p>
+        <p className="text-xs font-bold text-slate-400 mt-2">登録済みのアカウントでログインしてください。</p>
       </div>
 
       <form onSubmit={handleLogin} className="flex flex-col gap-4 rounded-3xl border-4 border-slate-800 bg-white p-5 shadow-[6px_6px_0px_0px_rgba(15,23,42,1)]">
@@ -137,7 +134,7 @@ export default function LoginPage() {
           {loading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            'ログインする！ ✨'
+            'ログインする'
           )}
         </button>
         <button type="button" onClick={handleSignUp} disabled={loading} className="min-h-12 rounded-2xl border-2 border-slate-800 bg-emerald-100 text-sm font-black disabled:opacity-50">新しく利用登録する</button>

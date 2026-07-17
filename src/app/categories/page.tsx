@@ -274,7 +274,7 @@ function CategoriesPageContent() {
         >
           {isAddingCategory
             ? <><Loader2 className="w-4 h-4 animate-spin inline mr-2" />追加しています</>
-            : 'このカテゴリを追加する ✨'}
+            : 'このカテゴリを追加'}
         </button>
       </form>}
 
@@ -415,7 +415,7 @@ function CategoriesPageContent() {
                 >
                   {isUpdatingCategory
                     ? <><Loader2 className="w-4 h-4 animate-spin inline mr-2" />保存しています</>
-                    : '変更を保存する！ ✨'}
+                    : '変更を保存'}
                 </button>
               </div>
               <button

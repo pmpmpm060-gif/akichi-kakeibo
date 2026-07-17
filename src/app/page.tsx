@@ -457,11 +457,6 @@ function HomePageContent() {
                 <>
                   <div className="flex flex-wrap items-end gap-2">
                     <span className="text-3xl font-black">¥{totalExpense.toLocaleString()}</span>
-                    {totalExpense > 0 && (
-                      <span className="mb-1 text-[10px] font-black bg-yellow-200 text-slate-700 px-2 py-0.5 rounded-full border border-slate-400">
-                        ナイス記録！👍
-                      </span>
-                    )}
                     {hasBudget && (
                       <span className={`mb-1 text-[10px] font-black bg-white px-2 py-0.5 rounded-full border ${isOverBudget ? 'border-rose-400 text-rose-700' : 'border-emerald-400 text-emerald-700'}`}>
                         {isOverBudget ? '予算オーバー' : '予算内'}
@@ -526,7 +521,7 @@ function HomePageContent() {
 
           {!loading && isSummaryOpen && (
             <div className="flex flex-col gap-5">
-              <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">今月の予算・実績案内 📊</p>
+              <p className="px-1 text-xs font-black uppercase tracking-widest text-slate-400">カテゴリ別の予算・実績</p>
 
               {budgetSummary.length === 0 && (
                 <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center">
@@ -536,7 +531,7 @@ function HomePageContent() {
 
               {budgetSummary.length > 0 && (
                 <div className="flex flex-col gap-2.5">
-                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">💸 支出の残り枠</p>
+                  <p className="px-1 text-[11px] font-black uppercase tracking-widest text-slate-400">支出の残り枠</p>
                   {budgetSummary.map((item) => {
                     const percent = item.budget > 0
                       ? Math.min((item.actual / item.budget) * 100, 100)
@@ -553,7 +548,7 @@ function HomePageContent() {
                             <span className="text-xs font-bold text-slate-500">¥{item.actual.toLocaleString()} / ¥{item.budget.toLocaleString()}</span>
                             {isOver && (
                               <span className="text-[10px] font-black bg-rose-500 text-white px-1.5 py-0.5 rounded border border-slate-800">
-                                オーバー！
+                                超過
                               </span>
                             )}
                           </div>
@@ -606,7 +601,7 @@ function HomePageContent() {
                 <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
                   isSimulationOk ? 'bg-indigo-200 border-indigo-400 text-indigo-800' : 'bg-orange-200 border-orange-400 text-orange-800'
                 }`}>
-                  {isSimulationOk ? 'ペースばっちり！✨' : 'ちょっと使いすぎ！⚠️'}
+                  {isSimulationOk ? '予算内ペース' : '使いすぎ傾向'}
                 </span>
                 {isSimulationOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </span>
@@ -629,8 +624,8 @@ function HomePageContent() {
                 <span>結果・診断:</span>
                 <span className={isSimulationOk ? 'text-indigo-600' : 'text-orange-600'}>
                   {isSimulationOk 
-                    ? `理想より ¥${simulationDiff.toLocaleString()} 多く変動費を残せています！`
-                    : `理想より ¥${simulationDiff.toLocaleString()} 変動費のペースが早いです！`
+                    ? `理想より ¥${simulationDiff.toLocaleString()} 多く変動費を残せています`
+                    : `理想より ¥${simulationDiff.toLocaleString()} 変動費のペースが早いです`
                   }
                 </span>
               </div>
@@ -642,14 +637,10 @@ function HomePageContent() {
       {/* 支出予算が未設定の場合は、設定画面への案内を表示する。 */}
       {!loading && !dataError && !hasBudget && (
         <div className="bg-slate-50 border-2 border-slate-400 border-dashed rounded-3xl p-4 text-center">
-          <p className="text-xs font-bold text-slate-500">予算がまだ設定されていません 🐷</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">上のメニューから「予算を決める」と、ここにメーターが表示されます！</p>
+          <p className="text-xs font-bold text-slate-500">予算がまだ設定されていません</p>
+          <p className="mt-0.5 text-[10px] text-slate-400">予算画面で支出予算を設定すると、ここに進捗が表示されます。</p>
         </div>
       )}
-
-      <p className="text-center text-xs font-bold text-slate-400 mt-4">
-        現在のモード: {currentProfile?.display_name || (currentUser === 'user_a' ? 'ママ' : 'パパ')}データ 🚀
-      </p>
 
       {editingTransaction && (
         <div onClick={closeTransactionEditor} className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4">

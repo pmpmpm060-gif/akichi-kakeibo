@@ -328,9 +328,9 @@ function BudgetsPageContent() {
           <DataErrorCard message={dataError} onRetry={retryFetch} />
         ) : categories.length === 0 ? (
           <div className="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-8 text-center">
-            <p className="text-sm font-bold text-slate-400 mb-3">まずはカテゴリを追加してね！</p>
+            <p className="text-sm font-bold text-slate-400 mb-3">先にカテゴリを追加してください。</p>
             <Link href={`/categories?user=${currentUser}`} className="text-xs font-black bg-pink-300 text-slate-900 px-4 py-2 rounded-xl border-2 border-slate-800 inline-block">
-              カテゴリ設定へ 🏃‍♂️
+              カテゴリ設定へ
             </Link>
           </div>
         ) : (
@@ -436,7 +436,7 @@ function BudgetsPageContent() {
               disabled={isSaving}
               className="w-full bg-sky-300 text-slate-900 font-black py-4 rounded-2xl border-2 border-slate-800 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] text-sm flex items-center justify-center gap-2 mt-2"
             >
-              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" strokeWidth={2.5} />予算とTOTAL繰越を保存する！ ✨</>}
+              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" strokeWidth={2.5} />予算とTOTAL繰越を保存</>}
             </button>
           </div>
         )}
