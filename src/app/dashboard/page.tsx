@@ -52,6 +52,7 @@ function DashboardPageContent() {
   const [categoryId, setCategoryId] = useState("");
   const [date, setDate] = useState(() => todayStr);
   const [description, setDescription] = useState("");
+  const [formError, setFormError] = useState("");
   const [isAddingTransaction, setIsAddingTransaction] = useState(false);
   const [recentCategoryIds, setRecentCategoryIds] = useState<string[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -190,27 +191,43 @@ function DashboardPageContent() {
   const activeTemplates = templates.filter((template) => categories.some((category) => category.id === template.category_id));
   const canApplyBudgetOffset = selectedCategory?.type === 'income';
 
-  const handleAddTransaction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isAddingTransaction || !amount || !categoryId) return;
-
-    if (!selectedCategory) return;
+  const validateTransactionForm = () => {
+    if (!canEdit) return '参照中のプロフィールには記録できません。本人プロフィールに切り替えてください。';
+    if (categories.length === 0) return '分類がまだありません。先に「その他」からカテゴリを追加してください。';
+    if (!categoryId) return '分類を選んでください。';
+    if (!selectedCategory) return '選択中の分類を利用できません。別の分類を選んでください。';
+    if (!date) return '日付を選んでください。';
 
     const parsedAmount = Number(amount);
-    if (!Number.isSafeInteger(parsedAmount) || parsedAmount <= 0) {
-      alert('金額は1円以上の整数で入力してください。');
+    if (!amount.trim()) return '金額を入力してください。';
+    if (!Number.isSafeInteger(parsedAmount) || parsedAmount <= 0) return '金額は1円以上の整数で入力してください。';
+
+    if (canApplyBudgetOffset && budgetOffsetEnabled && budgetOffsetType === 'category') {
+      if (!budgetOffsetCategoryId || !expenseCategories.some((category) => category.id === budgetOffsetCategoryId)) {
+        return '上乗せ先の支出カテゴリを選んでください。';
+      }
+    }
+
+    return '';
+  };
+
+  const handleAddTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isAddingTransaction) return;
+
+    const validationError = validateTransactionForm();
+    if (validationError) {
+      setFormError(validationError);
       return;
     }
+    setFormError("");
+    const parsedAmount = Number(amount);
 
     let targetBudgetOffsetType: 'none' | BudgetOffsetType = 'none';
     let targetBudgetOffsetCategoryId: string | null = null;
     if (canApplyBudgetOffset && budgetOffsetEnabled) {
       targetBudgetOffsetType = budgetOffsetType;
       if (budgetOffsetType === 'category') {
-        if (!budgetOffsetCategoryId || !expenseCategories.some((category) => category.id === budgetOffsetCategoryId)) {
-          alert('上乗せ先の支出カテゴリを選んでください。');
-          return;
-        }
         targetBudgetOffsetCategoryId = budgetOffsetCategoryId;
       }
     }
@@ -228,12 +245,12 @@ function DashboardPageContent() {
         target_budget_offset_category_id: targetBudgetOffsetCategoryId,
       });
       if (error) {
-        alert(userErrorMessage('登録', error));
+        setFormError(`${userErrorMessage('登録', error)} 入力内容は残しています。`);
         return;
       }
       const { data: createdData, error: fetchError } = await supabase.from('transactions').select('*, categories!transactions_category_id_fkey(name, type, icon)').eq('id', transactionId).is('deleted_at', null).single();
       if (fetchError) {
-        alert('登録しましたが、画面への反映に失敗しました。再読み込みしてください。');
+        setFormError('登録しましたが、画面への反映に失敗しました。二重登録を避けるため、画面を再読み込みして確認してください。');
         return;
       }
       const created = createdData;
@@ -243,11 +260,12 @@ function DashboardPageContent() {
       setBudgetOffsetEnabled(false);
       setBudgetOffsetType('overall');
       setBudgetOffsetCategoryId('');
+      setFormError("");
       setRecentCategoryIds((current) => [categoryId, ...current.filter((id) => id !== categoryId)].slice(0, 4));
       notify('家計簿に記録しました');
       router.refresh();
     } catch {
-      alert('登録処理中に通信エラーが発生しました。画面を再読み込みして登録状況を確認してください。');
+      setFormError('登録処理中に通信エラーが発生しました。入力内容は残しています。通信状況を確認して、もう一度お試しください。');
     } finally {
       setIsAddingTransaction(false);
     }
@@ -341,6 +359,8 @@ function DashboardPageContent() {
     setCategoryId(template.category_id);
     setAmount(String(template.amount));
     setDescription(template.description);
+    setDate(todayStr);
+    setFormError("");
     document.getElementById('transaction-form')?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -356,16 +376,16 @@ function DashboardPageContent() {
         <DataErrorCard message={dataError} onRetry={retryFetch} />
       ) : (
         <>
-          {activeTemplates.length > 0 && <section className="flex flex-col gap-2"><h2 className="flex items-center gap-2 text-sm font-black"><Zap className="h-5 w-5 text-amber-500" />テンプレートから入力</h2><div className="flex gap-2 overflow-x-auto pb-1">{activeTemplates.map((template) => <button key={template.id} type="button" onClick={() => applyTemplate(template)} className="min-h-12 shrink-0 rounded-xl border-2 border-slate-800 bg-amber-100 px-3 text-xs font-black">{template.name}<span className="ml-1 text-slate-500">¥{template.amount.toLocaleString()}</span></button>)}</div></section>}
           {/* 取引入力フォーム */}
-          <form id="transaction-form" onSubmit={handleAddTransaction} className="scroll-mt-4 bg-emerald-50 border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4">
+          <form id="transaction-form" noValidate onSubmit={handleAddTransaction} className="scroll-mt-4 bg-emerald-50 border-2 border-slate-800 rounded-3xl p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] flex flex-col gap-4">
             <h2 className="font-black text-base text-emerald-950 flex items-center gap-1.5">
               <Plus className="w-5 h-5" strokeWidth={3} /> 今日の支出・収入
             </h2>
+            {activeTemplates.length > 0 && <section className="flex flex-col gap-2"><h3 className="flex items-center gap-2 text-sm font-black"><Zap className="h-5 w-5 text-amber-500" />テンプレートから入力</h3><div className="flex gap-2 overflow-x-auto pb-1">{activeTemplates.map((template) => <button key={template.id} type="button" onClick={() => applyTemplate(template)} className="min-h-12 shrink-0 rounded-xl border-2 border-slate-800 bg-amber-100 px-3 text-xs font-black">{template.name}<span className="ml-1 text-slate-500">¥{template.amount.toLocaleString()}</span></button>)}</div></section>}
             {recentCategoryIds.length > 0 && <div className="flex gap-2 overflow-x-auto pb-1">
               {recentCategoryIds.map((id) => {
                 const category = categories.find((item) => item.id === id);
-                return category ? <button key={id} type="button" onClick={() => setCategoryId(id)} className={`min-h-11 shrink-0 rounded-xl border-2 px-3 text-xs font-black ${categoryId === id ? 'border-slate-800 bg-amber-200' : 'border-slate-300 bg-white'}`}>{category.icon} {category.name}</button> : null;
+                return category ? <button key={id} type="button" onClick={() => { setCategoryId(id); setFormError(""); }} className={`min-h-11 shrink-0 rounded-xl border-2 px-3 text-xs font-black ${categoryId === id ? 'border-slate-800 bg-amber-200' : 'border-slate-300 bg-white'}`}>{category.icon} {category.name}</button> : null;
               })}
             </div>}
 
@@ -381,6 +401,7 @@ function DashboardPageContent() {
                   onChange={(e) => {
                     const nextCategory = categories.find((category) => category.id === e.target.value);
                     setCategoryId(e.target.value);
+                    setFormError("");
                     if (nextCategory?.type !== 'income') setBudgetOffsetEnabled(false);
                   }}
                   className="min-h-12 min-w-0 max-w-full rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-base font-bold"
@@ -394,7 +415,7 @@ function DashboardPageContent() {
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-black text-emerald-900 pl-1">いくら？</label>
-              <div className="flex gap-2"><input type="number" inputMode="numeric" enterKeyHint="next" min="1" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); descriptionInputRef.current?.focus(); } }} placeholder="金額を入力" className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-black" /><AmountCalculator value={amount} min={1} onApply={(result) => setAmount(String(result))} disabled={isAddingTransaction} /></div>
+              <div className="flex gap-2"><input type="number" inputMode="numeric" enterKeyHint="next" min="1" step="1" value={amount} onChange={(e) => { setAmount(e.target.value); setFormError(""); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); descriptionInputRef.current?.focus(); } }} placeholder="金額を入力" className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-black" /><AmountCalculator value={amount} min={1} onApply={(result) => { setAmount(String(result)); setFormError(""); }} disabled={isAddingTransaction} /></div>
             </div>
 
             {canApplyBudgetOffset && (
@@ -403,7 +424,7 @@ function DashboardPageContent() {
                   <input
                     type="checkbox"
                     checked={budgetOffsetEnabled}
-                    onChange={(event) => setBudgetOffsetEnabled(event.target.checked)}
+                    onChange={(event) => { setBudgetOffsetEnabled(event.target.checked); setFormError(""); }}
                     className="mt-1 h-5 w-5 rounded border-2 border-slate-800"
                   />
                   <span className="min-w-0">
@@ -415,7 +436,7 @@ function DashboardPageContent() {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <select
                       value={budgetOffsetType}
-                      onChange={(event) => setBudgetOffsetType(event.target.value as BudgetOffsetType)}
+                      onChange={(event) => { setBudgetOffsetType(event.target.value as BudgetOffsetType); setFormError(""); }}
                       className="min-h-12 rounded-xl border-2 border-slate-800 bg-white px-3 text-base font-bold"
                     >
                       <option value="overall">全体予算に上乗せ</option>
@@ -424,7 +445,7 @@ function DashboardPageContent() {
                     {budgetOffsetType === 'category' && (
                       <select
                         value={budgetOffsetCategoryId}
-                        onChange={(event) => setBudgetOffsetCategoryId(event.target.value)}
+                        onChange={(event) => { setBudgetOffsetCategoryId(event.target.value); setFormError(""); }}
                         className="min-h-12 rounded-xl border-2 border-slate-800 bg-white px-3 text-base font-bold"
                       >
                         <option value="">上乗せ先を選択</option>
@@ -443,7 +464,12 @@ function DashboardPageContent() {
               <input ref={descriptionInputRef} type="text" enterKeyHint="done" value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} placeholder="カフェ、お買い物など（任意）" className="min-h-12 w-full rounded-xl border-2 border-slate-800 px-4 py-2.5 text-base font-bold" />
             </div>
 
-            <button type="submit" disabled={isAddingTransaction} className="w-full bg-slate-900 text-white font-black py-3 rounded-2xl border-2 border-slate-800 text-sm mt-1 disabled:opacity-60 flex items-center justify-center gap-2">
+            {formError && <p role="alert" className="rounded-2xl border-2 border-rose-200 bg-rose-50 p-3 text-sm font-black text-rose-700">{formError}</p>}
+
+            {!formError && !canEdit && <p className="rounded-2xl border-2 border-slate-200 bg-white p-3 text-sm font-black text-slate-600">参照中のプロフィールです。記録するには本人プロフィールへ切り替えてください。</p>}
+            {!formError && canEdit && categories.length === 0 && <p className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-3 text-sm font-black text-amber-800">分類がまだありません。先に「その他」からカテゴリを追加してください。</p>}
+
+            <button type="submit" disabled={isAddingTransaction || !canEdit || categories.length === 0} className="w-full bg-slate-900 text-white font-black py-3 rounded-2xl border-2 border-slate-800 text-sm mt-1 disabled:opacity-60 flex items-center justify-center gap-2">
               {isAddingTransaction
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> 記録中...</>
                 : '記録する'}
