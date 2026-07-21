@@ -18,6 +18,7 @@ import { useCurrentProfileId } from '../../lib/household-profiles';
 
 type Template = Database['public']['Tables']['transaction_templates']['Row'];
 type BudgetOffsetType = 'overall' | 'category';
+type FocusSortMode = 'date' | 'amount';
 
 function DashboardPageContent() {
   const router = useRouter();
@@ -68,6 +69,7 @@ function DashboardPageContent() {
   const [correctionReason, setCorrectionReason] = useState('');
   const [isUpdatingTransaction, setIsUpdatingTransaction] = useState(false);
   const [deletingTransactionId, setDeletingTransactionId] = useState<string | null>(null);
+  const [focusSortMode, setFocusSortMode] = useState<FocusSortMode>('date');
   const changeMonth = (increment: number) => {
     const newDate = new Date(currentDate.getTime());
     newDate.setMonth(newDate.getMonth() + increment);
@@ -206,6 +208,9 @@ function DashboardPageContent() {
   const visibleTransactions = focusCategoryId
     ? transactions.filter((transaction) => transaction.category_id === focusCategoryId)
     : transactions;
+  const sortedVisibleTransactions = focusCategoryId && focusSortMode === 'amount'
+    ? [...visibleTransactions].sort((left, right) => Number(right.amount) - Number(left.amount))
+    : visibleTransactions;
   const focusTransactionTotal = visibleTransactions.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
   const focusTransactionAverage = visibleTransactions.length > 0
     ? Math.round(focusTransactionTotal / visibleTransactions.length)
@@ -631,6 +636,25 @@ function DashboardPageContent() {
                     <p className="truncate text-sm font-black text-slate-900">¥{focusTransactionAverage.toLocaleString()}</p>
                   </div>
                 </div>
+                <div className="grid grid-cols-2 gap-2 rounded-xl border-2 border-slate-800 bg-white p-1">
+                  {[
+                    { value: 'date' as const, label: '新しい順' },
+                    { value: 'amount' as const, label: '高い順' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setFocusSortMode(option.value)}
+                      className={`min-h-10 rounded-lg px-3 text-xs font-black ${
+                        focusSortMode === option.value
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-white text-slate-700'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {visibleTransactions.length === 0 ? (
@@ -639,7 +663,7 @@ function DashboardPageContent() {
               </p>
             ) : (
               <div className="flex flex-col gap-2">
-                {visibleTransactions.map((transaction) => (
+                {sortedVisibleTransactions.map((transaction) => (
                   <button
                     key={transaction.id}
                     type="button"
