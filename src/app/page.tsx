@@ -546,12 +546,20 @@ function HomePageContent() {
             </p>
             <p className="mt-2 text-xs font-bold leading-relaxed text-slate-600">{spendingInsight.message}</p>
             {spendingInsight.focusCategoryId && (
-              <Link
-                href={{ pathname: '/budgets', query: { user: currentUser, focusCategory: spendingInsight.focusCategoryId } }}
-                className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl border-2 border-slate-800 bg-sky-300 px-3 py-2 text-xs font-black text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_rgba(15,23,42,1)]"
-              >
-                このカテゴリの予算を見る
-              </Link>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Link
+                  href={{ pathname: '/dashboard', query: { user: currentUser, focusCategory: spendingInsight.focusCategoryId } }}
+                  className="flex min-h-11 w-full items-center justify-center rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-xs font-black text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_rgba(15,23,42,1)]"
+                >
+                  今月の明細を見る
+                </Link>
+                <Link
+                  href={{ pathname: '/budgets', query: { user: currentUser, focusCategory: spendingInsight.focusCategoryId } }}
+                  className="flex min-h-11 w-full items-center justify-center rounded-xl border-2 border-slate-800 bg-sky-300 px-3 py-2 text-xs font-black text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_rgba(15,23,42,1)]"
+                >
+                  このカテゴリの予算を見る
+                </Link>
+              </div>
             )}
           </div>
         </section>

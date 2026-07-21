@@ -23,6 +23,7 @@ function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const focusCategoryId = searchParams.get('focusCategory') || '';
   const ownProfileId = useCurrentProfileId();
   const canEdit = ownProfileId === currentUser;
   const notify = useToast();
@@ -187,9 +188,13 @@ function DashboardPageContent() {
   };
 
   const selectedCategory = categories.find((category) => category.id === categoryId);
+  const focusCategory = focusCategoryId ? categories.find((category) => category.id === focusCategoryId) : null;
   const expenseCategories = categories.filter((category) => category.type === 'expense');
   const activeTemplates = templates.filter((template) => categories.some((category) => category.id === template.category_id));
   const reusableLastTransaction = transactions.find((transaction) => categories.some((category) => category.id === transaction.category_id)) || null;
+  const visibleTransactions = focusCategoryId
+    ? transactions.filter((transaction) => transaction.category_id === focusCategoryId)
+    : transactions;
   const canApplyBudgetOffset = selectedCategory?.type === 'income';
 
   const validateTransactionForm = () => {
@@ -578,12 +583,32 @@ function DashboardPageContent() {
           </div>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-sm font-black text-slate-800">{Number(jstMonth)}月の記録</h2>
-            {transactions.length === 0 ? (
-              <p className="rounded-2xl border-2 border-dashed border-slate-300 p-5 text-center text-sm font-bold text-slate-400">この月の記録はありません。</p>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="min-w-0 text-sm font-black text-slate-800">
+                {Number(jstMonth)}月の記録{focusCategory ? `（${focusCategory.name}）` : ''}
+              </h2>
+              {focusCategoryId && (
+                <button
+                  type="button"
+                  onClick={() => router.replace(`/dashboard?user=${currentUser}`)}
+                  className="shrink-0 rounded-xl border-2 border-slate-800 bg-white px-3 py-2 text-[10px] font-black text-slate-700"
+                >
+                  全件表示
+                </button>
+              )}
+            </div>
+            {focusCategory && (
+              <p className="rounded-2xl border-2 border-slate-800 bg-sky-50 px-3 py-2 text-xs font-bold text-slate-700">
+                ホームの見直しポイントから、{focusCategory.name}の当月明細だけを表示しています。
+              </p>
+            )}
+            {visibleTransactions.length === 0 ? (
+              <p className="rounded-2xl border-2 border-dashed border-slate-300 p-5 text-center text-sm font-bold text-slate-400">
+                {focusCategory ? 'このカテゴリの記録はありません。' : 'この月の記録はありません。'}
+              </p>
             ) : (
               <div className="flex flex-col gap-2">
-                {transactions.map((transaction) => (
+                {visibleTransactions.map((transaction) => (
                   <button
                     key={transaction.id}
                     type="button"
