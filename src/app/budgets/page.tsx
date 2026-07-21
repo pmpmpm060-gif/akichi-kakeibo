@@ -14,6 +14,11 @@ import { AmountCalculator } from '../../components/amount-calculator';
 
 const isValidBudgetAmount = (amount: number) => Number.isSafeInteger(amount) && amount >= 0;
 type BudgetAllocationTransaction = { amount: number; category_id: string };
+type FocusBudgetStats = {
+  categoryId: string;
+  currentActual: number;
+  previousActual: number;
+};
 
 const HISTORY_MONTH_OPTIONS = [3, 6, 12] as const;
 const ROUND_UNIT_OPTIONS = [1, 100, 1000, 10000] as const;
@@ -24,6 +29,12 @@ function localDateString(date: Date) {
 
 function monthLabel(date: Date) {
   return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+}
+
+function formatSignedYen(amount: number) {
+  if (amount > 0) return `+¥${amount.toLocaleString()}`;
+  if (amount < 0) return `-¥${Math.abs(amount).toLocaleString()}`;
+  return '¥0';
 }
 
 function allocateByHistory(
@@ -90,6 +101,7 @@ function BudgetsPageContent() {
   const [roundUnit, setRoundUnit] = useState<(typeof ROUND_UNIT_OPTIONS)[number]>(100);
   const [isAllocatingBudget, setIsAllocatingBudget] = useState(false);
   const [allocationSummary, setAllocationSummary] = useState<string | null>(null);
+  const [focusBudgetStats, setFocusBudgetStats] = useState<FocusBudgetStats | null>(null);
 
   useEffect(() => {
     // ユーザー切替前の通信結果が後から返る場合があるため、古い結果は無視する。
@@ -97,7 +109,28 @@ function BudgetsPageContent() {
     let ignore = false;
 
     const fetchData = async () => {
-      const [categoryResult, budgetResult] = await Promise.all([
+      const now = new Date();
+      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+      const currentStart = localDateString(currentMonthStart);
+      const currentEnd = localDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+      const previousStart = localDateString(previousMonthStart);
+      const previousEnd = localDateString(previousMonthEnd);
+      const focusStatsRequest = focusCategoryId
+        ? supabase
+          .from('transactions')
+          .select('amount, date')
+          .eq('user_id', currentUser)
+          .eq('category_id', focusCategoryId)
+          .eq('type', 'expense')
+          .is('deleted_at', null)
+          .is('recurring_transaction_id', null)
+          .gte('date', previousStart)
+          .lte('date', currentEnd)
+        : Promise.resolve({ data: [], error: null });
+
+      const [categoryResult, budgetResult, focusStatsResult] = await Promise.all([
         supabase.from('categories').select('*').eq('user_id', currentUser).is('deleted_at', null).order('sort_order').order('created_at'),
         // この画面では毎月共通の基本予算を編集する。
         // 繰越反映後の予算は、表示時にget_effective_budgetsで計算する。
@@ -105,11 +138,12 @@ function BudgetsPageContent() {
           .from('budgets')
           .select('category_id, amount')
           .eq('user_id', currentUser),
+        focusStatsRequest,
       ]);
 
       if (ignore) return;
 
-      const error = categoryResult.error || budgetResult.error;
+      const error = categoryResult.error || budgetResult.error || focusStatsResult.error;
       if (error) {
         setDataError('予算データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
         setLoading(false);
@@ -129,6 +163,20 @@ function BudgetsPageContent() {
         budgetMap[budget.category_id] = budget.amount;
       });
       setBudgets(budgetMap);
+      if (focusCategoryId) {
+        const focusTransactions = focusStatsResult.data || [];
+        setFocusBudgetStats({
+          categoryId: focusCategoryId,
+          currentActual: focusTransactions
+            .filter((transaction) => transaction.date >= currentStart && transaction.date <= currentEnd)
+            .reduce((sum, transaction) => sum + Number(transaction.amount), 0),
+          previousActual: focusTransactions
+            .filter((transaction) => transaction.date >= previousStart && transaction.date <= previousEnd)
+            .reduce((sum, transaction) => sum + Number(transaction.amount), 0),
+        });
+      } else {
+        setFocusBudgetStats(null);
+      }
       setHasChanges(false);
       setLoading(false);
     };
@@ -143,7 +191,7 @@ function BudgetsPageContent() {
     return () => {
       ignore = true;
     };
-  }, [currentUser, retryKey]);
+  }, [currentUser, focusCategoryId, retryKey]);
 
   useEffect(() => {
     if (loading || dataError || !focusCategoryId) return;
@@ -282,6 +330,11 @@ function BudgetsPageContent() {
       const amount = budgets[cat.id];
       const hasInvalidAmount = amount !== undefined && !isValidBudgetAmount(amount);
       const isFocused = cat.id === focusCategoryId;
+      const focusedStats = isFocused && focusBudgetStats?.categoryId === cat.id ? focusBudgetStats : null;
+      const budgetAmount = amount || 0;
+      const budgetDiff = focusedStats ? focusedStats.currentActual - budgetAmount : 0;
+      const previousDiff = focusedStats ? focusedStats.currentActual - focusedStats.previousActual : 0;
+      const suggestedBudgetAmount = focusedStats ? Math.max(focusedStats.currentActual, focusedStats.previousActual) : 0;
 
       return (
         <div
@@ -297,6 +350,50 @@ function BudgetsPageContent() {
             <p className="w-fit rounded-xl border border-pink-300 bg-white px-2 py-1 text-[10px] font-black text-pink-700">
               見直しポイントのカテゴリ
             </p>
+          )}
+          {focusedStats && (
+            <div className="grid gap-2 rounded-xl border-2 border-slate-800 bg-white p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="min-w-0 rounded-lg bg-sky-50 px-2 py-1.5">
+                  <p className="text-[10px] font-black text-slate-500">当月変動費</p>
+                  <p className="truncate text-sm font-black text-slate-900">¥{focusedStats.currentActual.toLocaleString()}</p>
+                </div>
+                <div className="min-w-0 rounded-lg bg-amber-50 px-2 py-1.5">
+                  <p className="text-[10px] font-black text-slate-500">現在予算</p>
+                  <p className="truncate text-sm font-black text-slate-900">¥{budgetAmount.toLocaleString()}</p>
+                </div>
+                <div className="min-w-0 rounded-lg bg-pink-50 px-2 py-1.5">
+                  <p className="text-[10px] font-black text-slate-500">{budgetDiff > 0 ? '予算超過' : '予算残り'}</p>
+                  <p className={`truncate text-sm font-black ${budgetDiff > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                    {budgetDiff > 0 ? formatSignedYen(budgetDiff) : `¥${Math.abs(budgetDiff).toLocaleString()}`}
+                  </p>
+                </div>
+                <div className="min-w-0 rounded-lg bg-emerald-50 px-2 py-1.5">
+                  <p className="text-[10px] font-black text-slate-500">前月差</p>
+                  <p className={`truncate text-sm font-black ${previousDiff > 0 ? 'text-rose-600' : previousDiff < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
+                    {formatSignedYen(previousDiff)}
+                  </p>
+                </div>
+              </div>
+              <p className="text-[10px] font-bold leading-relaxed text-slate-600">
+                {budgetDiff > 0
+                  ? `今の予算より${formatSignedYen(budgetDiff)}です。予算を上げるか、残りの支出を抑える判断材料にできます。`
+                  : `今の予算内です。あと¥${Math.abs(budgetDiff).toLocaleString()}まで使えます。`}
+              </p>
+              {suggestedBudgetAmount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleAmountChange(cat.id, String(suggestedBudgetAmount));
+                    notify('調整候補を予算欄へ反映しました');
+                  }}
+                  disabled={isSaving || suggestedBudgetAmount === budgetAmount}
+                  className="flex min-h-11 w-full items-center justify-center rounded-xl border-2 border-slate-800 bg-sky-300 px-3 py-2 text-xs font-black text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] disabled:bg-slate-100 disabled:text-slate-500 disabled:shadow-none"
+                >
+                  ¥{suggestedBudgetAmount.toLocaleString()} を予算に反映
+                </button>
+              )}
+            </div>
           )}
           <span className="flex min-w-0 items-center gap-2 text-sm font-black text-slate-800">
             <span className="text-xl">{cat.icon || (cat.type === 'income' ? "💰" : "💸")}</span> {cat.name}
