@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, Loader2, ChevronLeft, ChevronRight, Wallet, ArrowDownRight, ArrowUpRight, Zap, X, Trash2 } from 'lucide-react';
+import { Plus, Loader2, ChevronLeft, ChevronRight, Wallet, ArrowDownRight, ArrowUpRight, Zap, X, Trash2, RotateCcw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { parseHouseholdUser } from '../../lib/household-users';
 import { DataErrorCard } from '../../components/data-error-card';
@@ -189,6 +189,7 @@ function DashboardPageContent() {
   const selectedCategory = categories.find((category) => category.id === categoryId);
   const expenseCategories = categories.filter((category) => category.type === 'expense');
   const activeTemplates = templates.filter((template) => categories.some((category) => category.id === template.category_id));
+  const reusableLastTransaction = transactions.find((transaction) => categories.some((category) => category.id === transaction.category_id)) || null;
   const canApplyBudgetOffset = selectedCategory?.type === 'income';
 
   const validateTransactionForm = () => {
@@ -364,6 +365,28 @@ function DashboardPageContent() {
     document.getElementById('transaction-form')?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const applyLastTransaction = () => {
+    if (!reusableLastTransaction) return;
+    const category = categories.find((item) => item.id === reusableLastTransaction.category_id);
+    if (!category) return;
+    setCategoryId(reusableLastTransaction.category_id);
+    setAmount(String(reusableLastTransaction.amount));
+    setDescription(reusableLastTransaction.description || '');
+    setDate(todayStr);
+    const previousBudgetOffsetType = reusableLastTransaction.budget_offset_type;
+    if (category.type === 'income' && (previousBudgetOffsetType === 'overall' || previousBudgetOffsetType === 'category')) {
+      setBudgetOffsetEnabled(true);
+      setBudgetOffsetType(previousBudgetOffsetType);
+      setBudgetOffsetCategoryId(reusableLastTransaction.budget_offset_category_id || '');
+    } else {
+      setBudgetOffsetEnabled(false);
+      setBudgetOffsetType('overall');
+      setBudgetOffsetCategoryId('');
+    }
+    setFormError("");
+    document.getElementById('transaction-form')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   return (
     <div className="flex flex-col gap-6 px-4 py-5">
       <AppHeader title="家計簿を付ける" currentUser={currentUser} />
@@ -381,6 +404,25 @@ function DashboardPageContent() {
             <h2 className="font-black text-base text-emerald-950 flex items-center gap-1.5">
               <Plus className="w-5 h-5" strokeWidth={3} /> 今日の支出・収入
             </h2>
+            {canEdit && reusableLastTransaction && (
+              <button
+                type="button"
+                onClick={applyLastTransaction}
+                disabled={isAddingTransaction}
+                className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border-2 border-slate-800 bg-white p-3 text-left shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] disabled:opacity-50"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <RotateCcw className="h-5 w-5 shrink-0 text-emerald-700" />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-black text-emerald-900">前回と同じ内容で入力</span>
+                    <span className="block truncate text-[11px] font-bold text-slate-500">
+                      前回: {reusableLastTransaction.categories?.icon} {reusableLastTransaction.categories?.name || '分類'} ¥{reusableLastTransaction.amount.toLocaleString()}{reusableLastTransaction.description ? ` ${reusableLastTransaction.description}` : ''}
+                    </span>
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">今日で複製</span>
+              </button>
+            )}
             {activeTemplates.length > 0 && <section className="flex flex-col gap-2"><h3 className="flex items-center gap-2 text-sm font-black"><Zap className="h-5 w-5 text-amber-500" />テンプレートから入力</h3><div className="flex gap-2 overflow-x-auto pb-1">{activeTemplates.map((template) => <button key={template.id} type="button" onClick={() => applyTemplate(template)} className="min-h-12 shrink-0 rounded-xl border-2 border-slate-800 bg-amber-100 px-3 text-xs font-black">{template.name}<span className="ml-1 text-slate-500">¥{template.amount.toLocaleString()}</span></button>)}</div></section>}
             {recentCategoryIds.length > 0 && <div className="flex gap-2 overflow-x-auto pb-1">
               {recentCategoryIds.map((id) => {
