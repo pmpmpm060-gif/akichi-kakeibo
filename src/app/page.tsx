@@ -2,6 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 import { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Sparkles, Loader2, User, RefreshCw, TrendingUp, LogOut, ChevronDown, ChevronUp, Repeat2, Bell, X, Eye, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -25,6 +26,7 @@ type SpendingInsight = {
   amountLabel: string;
   message: string;
   tone: 'good' | 'watch' | 'danger';
+  focusCategoryId?: string;
 };
 
 function localDateString(date: Date) {
@@ -234,6 +236,7 @@ function HomePageContent() {
               amountLabel: `予算より +¥${budgetOver.toLocaleString()}`,
               message: `残り${remDays > 0 ? remDays : 1}日は追加支出を抑えると、月末の超過を小さくできます。`,
               tone: 'danger',
+              focusCategoryId: category.id,
             };
           } else if (budget > 0 && currentVariable >= budget * 0.8) {
             score = 300 + currentVariable;
@@ -242,6 +245,7 @@ function HomePageContent() {
               amountLabel: `予算まであと ¥${Math.max(budgetRemaining, 0).toLocaleString()}`,
               message: `残り${remDays > 0 ? remDays : 1}日は1日あたり ¥${Math.max(Math.floor(budgetRemaining / Math.max(remDays, 1)), 0).toLocaleString()} 以内が目安です。`,
               tone: 'watch',
+              focusCategoryId: category.id,
             };
           } else if (previousVariable > 0 && previousIncrease >= 3000 && currentVariable >= previousVariable * 1.5) {
             score = 200 + previousIncrease;
@@ -250,6 +254,7 @@ function HomePageContent() {
               amountLabel: `前月より +¥${previousIncrease.toLocaleString()}`,
               message: '固定費を除いた支出が増えています。今月の記録を見返す候補です。',
               tone: 'watch',
+              focusCategoryId: category.id,
             };
           }
 
@@ -540,6 +545,14 @@ function HomePageContent() {
               {spendingInsight.amountLabel}
             </p>
             <p className="mt-2 text-xs font-bold leading-relaxed text-slate-600">{spendingInsight.message}</p>
+            {spendingInsight.focusCategoryId && (
+              <Link
+                href={{ pathname: '/budgets', query: { user: currentUser, focusCategory: spendingInsight.focusCategoryId } }}
+                className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl border-2 border-slate-800 bg-sky-300 px-3 py-2 text-xs font-black text-slate-900 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_rgba(15,23,42,1)]"
+              >
+                このカテゴリの予算を見る
+              </Link>
+            )}
           </div>
         </section>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Save, Loader2, Repeat2, Wand2 } from 'lucide-react';
@@ -73,7 +73,9 @@ function allocateByHistory(
 function BudgetsPageContent() {
   const searchParams = useSearchParams();
   const currentUser = parseHouseholdUser(searchParams.get('user'));
+  const focusCategoryId = searchParams.get('focusCategory') || '';
   const notify = useToast();
+  const focusCategoryRef = useRef<HTMLDivElement | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<{ [key: string]: number }>({});
@@ -142,6 +144,16 @@ function BudgetsPageContent() {
       ignore = true;
     };
   }, [currentUser, retryKey]);
+
+  useEffect(() => {
+    if (loading || dataError || !focusCategoryId) return;
+
+    const timerId = window.setTimeout(() => {
+      focusCategoryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+
+    return () => window.clearTimeout(timerId);
+  }, [categories, dataError, focusCategoryId, loading]);
 
   const retryFetch = () => {
     setLoading(true);
@@ -269,12 +281,23 @@ function BudgetsPageContent() {
     return targetCategories.map((cat) => {
       const amount = budgets[cat.id];
       const hasInvalidAmount = amount !== undefined && !isValidBudgetAmount(amount);
+      const isFocused = cat.id === focusCategoryId;
 
       return (
         <div
           key={cat.id}
-          className="grid gap-2 rounded-2xl border-2 border-slate-800 bg-white p-3 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
+          ref={isFocused ? focusCategoryRef : undefined}
+          className={`grid gap-2 rounded-2xl border-2 p-3 ${
+            isFocused
+              ? 'border-pink-500 bg-pink-50 shadow-[4px_4px_0px_0px_rgba(236,72,153,1)]'
+              : 'border-slate-800 bg-white shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]'
+          }`}
         >
+          {isFocused && (
+            <p className="w-fit rounded-xl border border-pink-300 bg-white px-2 py-1 text-[10px] font-black text-pink-700">
+              見直しポイントのカテゴリ
+            </p>
+          )}
           <span className="flex min-w-0 items-center gap-2 text-sm font-black text-slate-800">
             <span className="text-xl">{cat.icon || (cat.type === 'income' ? "💰" : "💸")}</span> {cat.name}
           </span>
