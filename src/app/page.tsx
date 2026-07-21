@@ -20,6 +20,12 @@ type BudgetSummaryItem = Category & {
   carryover: number;
 };
 type HouseholdAlert = { key: string; message: string };
+type SpendingInsight = {
+  title: string;
+  amountLabel: string;
+  message: string;
+  tone: 'good' | 'watch' | 'danger';
+};
 
 function localDateString(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -51,6 +57,7 @@ function HomePageContent() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [alerts, setAlerts] = useState<HouseholdAlert[]>([]);
+  const [spendingInsight, setSpendingInsight] = useState<SpendingInsight | null>(null);
   const [dismissingAlertKey, setDismissingAlertKey] = useState<string | null>(null);
   const [calendarTransactions, setCalendarTransactions] = useState<TransactionWithCategory[]>([]);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
@@ -109,7 +116,7 @@ function HomePageContent() {
           target_user_id: currentUser,
           target_month: startOfMonth,
         }),
-        supabase.from('transactions').select('amount, category_id, type').eq('user_id', currentUser).is('deleted_at', null).gte('date', `${previousMonth}-01`).lte('date', previousEnd),
+        supabase.from('transactions').select('amount, category_id, type, recurring_transaction_id').eq('user_id', currentUser).is('deleted_at', null).gte('date', `${previousMonth}-01`).lte('date', previousEnd),
         supabase.from('dismissed_alerts').select('alert_key').eq('user_id', currentUser),
       ]);
 
@@ -144,6 +151,10 @@ function HomePageContent() {
       const normalBudgetOffsetTotal = overallBudgetOffset + categoryBudgetOffsetTotal;
       const expenseBudgets = (budgetResult.data || []).filter((item) => item.category_type === 'expense');
       const totalCarryoverAmount = expenseBudgets.reduce((sum, item) => sum + Number(item.carryover_amount), 0);
+      const hasBudgetValue = expenseBudgets.some(
+        (item) =>
+          Number(item.base_amount) !== 0 || Number(item.carryover_amount) !== 0
+      ) || normalBudgetOffsetTotal > 0;
       setTotalExpense(
         currentTransactions
           .filter((item) => item.type === 'expense')
@@ -160,12 +171,7 @@ function HomePageContent() {
       );
       setTotalBudgetOffset(normalBudgetOffsetTotal);
       setTotalCarryover(totalCarryoverAmount);
-      setHasBudget(
-        expenseBudgets.some(
-          (item) =>
-            Number(item.base_amount) !== 0 || Number(item.carryover_amount) !== 0
-        ) || normalBudgetOffsetTotal > 0
-      );
+      setHasBudget(hasBudgetValue);
       setBudgetSummary(
         // トップ画面の予算案内は、支出カテゴリだけを対象にする。
         (categoryResult.data || [])
@@ -205,13 +211,90 @@ function HomePageContent() {
         else if (budget > 0 && currentActual >= budget * 0.8 && hasVariableExpense) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:budget-80`, message: `${category.name}が予算の80%に達しました` });
         if (previousActual > 0 && currentActual >= previousActual * 1.5 && currentActual - previousActual >= 3000) nextAlerts.push({ key: `${yearMonthStr}:${category.id}:previous-increase`, message: `${category.name}が前月より大きく増えています` });
       });
+      const insightCandidates = (categoryResult.data || [])
+        .filter((category) => category.type === 'expense')
+        .map((category) => {
+          const currentVariable = currentTransactions
+            .filter((item) => item.category_id === category.id && item.type === 'expense' && item.recurring_transaction_id === null)
+            .reduce((sum, item) => sum + Number(item.amount), 0);
+          const previousVariable = (previousTransactionResult.data || [])
+            .filter((item) => item.category_id === category.id && item.type === 'expense' && item.recurring_transaction_id === null)
+            .reduce((sum, item) => sum + Number(item.amount), 0);
+          const budget = Number((budgetResult.data || []).find((item) => item.category_id === category.id)?.base_amount || 0) + (categoryBudgetOffsetMap.get(category.id) || 0);
+          const budgetOver = budget > 0 ? currentVariable - budget : 0;
+          const previousIncrease = previousVariable > 0 ? currentVariable - previousVariable : 0;
+          const budgetRemaining = budget - currentVariable;
+          let score = 0;
+          let insight: SpendingInsight | null = null;
+
+          if (budget > 0 && budgetOver > 0) {
+            score = 400 + budgetOver;
+            insight = {
+              title: `${category.icon || '💸'} ${category.name}を見直し`,
+              amountLabel: `予算より +¥${budgetOver.toLocaleString()}`,
+              message: `残り${remDays > 0 ? remDays : 1}日は追加支出を抑えると、月末の超過を小さくできます。`,
+              tone: 'danger',
+            };
+          } else if (budget > 0 && currentVariable >= budget * 0.8) {
+            score = 300 + currentVariable;
+            insight = {
+              title: `${category.icon || '💸'} ${category.name}に注意`,
+              amountLabel: `予算まであと ¥${Math.max(budgetRemaining, 0).toLocaleString()}`,
+              message: `残り${remDays > 0 ? remDays : 1}日は1日あたり ¥${Math.max(Math.floor(budgetRemaining / Math.max(remDays, 1)), 0).toLocaleString()} 以内が目安です。`,
+              tone: 'watch',
+            };
+          } else if (previousVariable > 0 && previousIncrease >= 3000 && currentVariable >= previousVariable * 1.5) {
+            score = 200 + previousIncrease;
+            insight = {
+              title: `${category.icon || '💸'} ${category.name}が増加`,
+              amountLabel: `前月より +¥${previousIncrease.toLocaleString()}`,
+              message: '固定費を除いた支出が増えています。今月の記録を見返す候補です。',
+              tone: 'watch',
+            };
+          }
+
+          return { score, insight };
+        })
+        .filter((item): item is { score: number; insight: SpendingInsight } => item.insight !== null)
+        .sort((left, right) => right.score - left.score);
+      const currentVariableExpense = currentTransactions
+        .filter((item) => item.type === 'expense' && item.recurring_transaction_id === null)
+        .reduce((sum, item) => sum + Number(item.amount), 0);
+      const currentFixedExpense = currentTransactions
+        .filter((item) => item.type === 'expense' && item.recurring_transaction_id !== null)
+        .reduce((sum, item) => sum + Number(item.amount), 0);
+      const variableBudgetAmount = Math.max(
+        expenseBudgets.reduce((sum, item) => sum + Number(item.base_amount), 0) + totalCarryoverAmount + normalBudgetOffsetTotal - currentFixedExpense,
+        0
+      );
+      const idealVariableRemaining = Math.floor(variableBudgetAmount * ((remDays > 0 ? remDays : 1) / lastDay));
+      const variableRemaining = variableBudgetAmount - currentVariableExpense;
+      const paceDiff = idealVariableRemaining - variableRemaining;
+      const nextInsight = insightCandidates[0]?.insight
+        || (hasBudgetValue && paceDiff > 0
+          ? {
+              title: '変動費のペースを調整',
+              amountLabel: `理想より +¥${paceDiff.toLocaleString()}`,
+              message: `残り${remDays > 0 ? remDays : 1}日は1日あたり ¥${Math.max(Math.floor(Math.max(variableRemaining, 0) / Math.max(remDays, 1)), 0).toLocaleString()} が目安です。`,
+              tone: 'watch' as const,
+            }
+          : hasBudgetValue
+            ? {
+                title: '今月は予算内ペース',
+                amountLabel: `変動費あと ¥${Math.max(variableRemaining, 0).toLocaleString()}`,
+                message: 'このペースなら月末まで予算内を狙えます。気になる支出はカレンダーで確認できます。',
+                tone: 'good' as const,
+              }
+            : null);
       setAlerts(nextAlerts.filter((alert) => !dismissedAlertKeys.has(alert.key)));
+      setSpendingInsight(nextInsight);
       setLoading(false);
     };
 
     void fetchCurrentMonthData().catch(() => {
       if (!ignore) {
         setDataError('データの取得に失敗しました。通信状況を確認して、もう一度お試しください。');
+        setSpendingInsight(null);
         setLoading(false);
       }
     });
@@ -435,6 +518,31 @@ function HomePageContent() {
       {ownProfileId !== undefined && !canEdit && <p className="relative z-10 flex items-center gap-2 rounded-2xl border-2 border-slate-800 bg-sky-50 px-3 py-2 text-xs font-black text-sky-800"><Eye className="h-4 w-4 shrink-0" />このプロフィールは参照モードです。変更は本人のログインで行ってください。</p>}
 
       {!loading && alerts.length > 0 && <section className="relative z-10 flex flex-col gap-2 rounded-3xl border-2 border-slate-800 bg-orange-50 p-4 shadow-[3px_3px_0px_0px_rgba(15,23,42,1)]"><h2 className="flex items-center gap-2 text-sm font-black text-orange-800"><Bell className="h-5 w-5" />家計アラート</h2>{alerts.map((item) => <div key={item.key} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-orange-700"><span className="min-w-0 flex-1">・{item.message}</span>{canEdit && <button type="button" onClick={() => dismissAlert(item)} disabled={dismissingAlertKey !== null} aria-label={`${item.message}を削除`} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 disabled:opacity-50">{dismissingAlertKey === item.key ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}</button>}</div>)}</section>}
+
+      {!loading && !dataError && spendingInsight && (
+        <section className={`relative z-10 flex flex-col gap-3 rounded-3xl border-2 border-slate-800 p-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] ${
+          spendingInsight.tone === 'danger' ? 'bg-rose-50' : spendingInsight.tone === 'watch' ? 'bg-amber-50' : 'bg-emerald-50'
+        }`}>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex min-w-0 items-center gap-2 text-sm font-black text-slate-900">
+              <Sparkles className="h-5 w-5 shrink-0 text-pink-500" />
+              今月の見直しポイント
+            </h2>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${
+              spendingInsight.tone === 'danger' ? 'border-rose-400 bg-white text-rose-700' : spendingInsight.tone === 'watch' ? 'border-amber-400 bg-white text-amber-700' : 'border-emerald-400 bg-white text-emerald-700'
+            }`}>
+              {spendingInsight.tone === 'good' ? '順調' : '確認'}
+            </span>
+          </div>
+          <div className="rounded-2xl border-2 border-slate-800 bg-white p-3">
+            <p className="truncate text-sm font-black text-slate-800">{spendingInsight.title}</p>
+            <p className={`mt-1 text-xl font-black ${spendingInsight.tone === 'danger' ? 'text-rose-600' : spendingInsight.tone === 'watch' ? 'text-orange-600' : 'text-emerald-700'}`}>
+              {spendingInsight.amountLabel}
+            </p>
+            <p className="mt-2 text-xs font-bold leading-relaxed text-slate-600">{spendingInsight.message}</p>
+          </div>
+        </section>
+      )}
 
       {/* 押下するとカテゴリ別の支出予算案内を展開する。 */}
       {!dataError && (
