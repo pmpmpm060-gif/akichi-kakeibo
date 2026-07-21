@@ -29,6 +29,7 @@ function DashboardPageContent() {
   const notify = useToast();
   const confirmAction = useConfirm();
   const descriptionInputRef = useRef<HTMLInputElement>(null);
+  const focusedRecordListRef = useRef<HTMLElement | null>(null);
 
   // currentDateは表示対象の月を表す。取引入力日は別のdate状態で管理する。
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -164,6 +165,16 @@ function DashboardPageContent() {
       ignore = true;
     };
   }, [canEdit, currentDate, currentUser, jstYear, retryKey, yearMonth]);
+
+  useEffect(() => {
+    if (loading || dataError || !focusCategoryId) return;
+
+    const timerId = window.setTimeout(() => {
+      focusedRecordListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+
+    return () => window.clearTimeout(timerId);
+  }, [dataError, focusCategoryId, loading, transactions]);
 
   const retryFetch = () => {
     setLoading(true);
@@ -582,7 +593,7 @@ function DashboardPageContent() {
             </div>
           </div>
 
-          <section className="flex flex-col gap-3">
+          <section ref={focusCategoryId ? focusedRecordListRef : undefined} className="scroll-mt-4 flex flex-col gap-3">
             <div className="flex items-center justify-between gap-2">
               <h2 className="min-w-0 text-sm font-black text-slate-800">
                 {Number(jstMonth)}月の記録{focusCategory ? `（${focusCategory.name}）` : ''}

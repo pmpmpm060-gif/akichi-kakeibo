@@ -24,6 +24,7 @@ type HouseholdAlert = { key: string; message: string };
 type SpendingInsight = {
   title: string;
   amountLabel: string;
+  reasonLabel: string;
   message: string;
   tone: 'good' | 'watch' | 'danger';
   focusCategoryId?: string;
@@ -234,6 +235,7 @@ function HomePageContent() {
             insight = {
               title: `${category.icon || '💸'} ${category.name}を見直し`,
               amountLabel: `予算より +¥${budgetOver.toLocaleString()}`,
+              reasonLabel: `判定理由: 変動費が予算を ¥${budgetOver.toLocaleString()} 超過`,
               message: `残り${remDays > 0 ? remDays : 1}日は追加支出を抑えると、月末の超過を小さくできます。`,
               tone: 'danger',
               focusCategoryId: category.id,
@@ -243,6 +245,7 @@ function HomePageContent() {
             insight = {
               title: `${category.icon || '💸'} ${category.name}に注意`,
               amountLabel: `予算まであと ¥${Math.max(budgetRemaining, 0).toLocaleString()}`,
+              reasonLabel: `判定理由: 変動費が予算の ${Math.floor((currentVariable / budget) * 100)}%`,
               message: `残り${remDays > 0 ? remDays : 1}日は1日あたり ¥${Math.max(Math.floor(budgetRemaining / Math.max(remDays, 1)), 0).toLocaleString()} 以内が目安です。`,
               tone: 'watch',
               focusCategoryId: category.id,
@@ -252,6 +255,7 @@ function HomePageContent() {
             insight = {
               title: `${category.icon || '💸'} ${category.name}が増加`,
               amountLabel: `前月より +¥${previousIncrease.toLocaleString()}`,
+              reasonLabel: `判定理由: 前月比 +¥${previousIncrease.toLocaleString()}`,
               message: '固定費を除いた支出が増えています。今月の記録を見返す候補です。',
               tone: 'watch',
               focusCategoryId: category.id,
@@ -280,6 +284,7 @@ function HomePageContent() {
           ? {
               title: '変動費のペースを調整',
               amountLabel: `理想より +¥${paceDiff.toLocaleString()}`,
+              reasonLabel: `判定理由: 変動費ペースが理想より ¥${paceDiff.toLocaleString()} 多め`,
               message: `残り${remDays > 0 ? remDays : 1}日は1日あたり ¥${Math.max(Math.floor(Math.max(variableRemaining, 0) / Math.max(remDays, 1)), 0).toLocaleString()} が目安です。`,
               tone: 'watch' as const,
             }
@@ -287,6 +292,7 @@ function HomePageContent() {
             ? {
                 title: '今月は予算内ペース',
                 amountLabel: `変動費あと ¥${Math.max(variableRemaining, 0).toLocaleString()}`,
+                reasonLabel: '判定理由: 変動費が予算内ペース',
                 message: 'このペースなら月末まで予算内を狙えます。気になる支出はカレンダーで確認できます。',
                 tone: 'good' as const,
               }
@@ -543,6 +549,11 @@ function HomePageContent() {
             <p className="truncate text-sm font-black text-slate-800">{spendingInsight.title}</p>
             <p className={`mt-1 text-xl font-black ${spendingInsight.tone === 'danger' ? 'text-rose-600' : spendingInsight.tone === 'watch' ? 'text-orange-600' : 'text-emerald-700'}`}>
               {spendingInsight.amountLabel}
+            </p>
+            <p className={`mt-2 rounded-xl border px-3 py-2 text-[11px] font-black ${
+              spendingInsight.tone === 'danger' ? 'border-rose-200 bg-rose-50 text-rose-700' : spendingInsight.tone === 'watch' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            }`}>
+              {spendingInsight.reasonLabel}
             </p>
             <p className="mt-2 text-xs font-bold leading-relaxed text-slate-600">{spendingInsight.message}</p>
             {spendingInsight.focusCategoryId && (
