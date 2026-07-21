@@ -206,6 +206,10 @@ function DashboardPageContent() {
   const visibleTransactions = focusCategoryId
     ? transactions.filter((transaction) => transaction.category_id === focusCategoryId)
     : transactions;
+  const focusTransactionTotal = visibleTransactions.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+  const focusTransactionAverage = visibleTransactions.length > 0
+    ? Math.round(focusTransactionTotal / visibleTransactions.length)
+    : 0;
   const canApplyBudgetOffset = selectedCategory?.type === 'income';
 
   const validateTransactionForm = () => {
@@ -609,9 +613,25 @@ function DashboardPageContent() {
               )}
             </div>
             {focusCategory && (
-              <p className="rounded-2xl border-2 border-slate-800 bg-sky-50 px-3 py-2 text-xs font-bold text-slate-700">
-                ホームの見直しポイントから、{focusCategory.name}の当月明細だけを表示しています。
-              </p>
+              <div className="grid gap-2 rounded-2xl border-2 border-slate-800 bg-sky-50 p-3">
+                <p className="text-xs font-bold text-slate-700">
+                  ホームの見直しポイントから、{focusCategory.name}の当月明細だけを表示しています。
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="min-w-0 rounded-xl border border-sky-200 bg-white px-2 py-1.5">
+                    <p className="text-[10px] font-black text-slate-500">合計</p>
+                    <p className="truncate text-sm font-black text-slate-900">¥{focusTransactionTotal.toLocaleString()}</p>
+                  </div>
+                  <div className="min-w-0 rounded-xl border border-sky-200 bg-white px-2 py-1.5">
+                    <p className="text-[10px] font-black text-slate-500">件数</p>
+                    <p className="truncate text-sm font-black text-slate-900">{visibleTransactions.length}件</p>
+                  </div>
+                  <div className="min-w-0 rounded-xl border border-sky-200 bg-white px-2 py-1.5">
+                    <p className="text-[10px] font-black text-slate-500">平均</p>
+                    <p className="truncate text-sm font-black text-slate-900">¥{focusTransactionAverage.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
             )}
             {visibleTransactions.length === 0 ? (
               <p className="rounded-2xl border-2 border-dashed border-slate-300 p-5 text-center text-sm font-bold text-slate-400">
